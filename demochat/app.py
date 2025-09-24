@@ -23,8 +23,7 @@ async def initialize_phenoml_client():
     username = os.getenv("PHENOML_USERNAME")
     password = os.getenv("PHENOML_PASSWORD")
     base_url = os.getenv("PHENOML_BASE_URL")
-    # agent_id = "your agent id"
-    agent_id = "san6n00rb2kxdxc"
+    agent_id = os.getenv("PHENOML_AGENT_ID")
    
     
     if not username or not password:
@@ -97,7 +96,7 @@ async def chat_endpoint(chat_message: ChatMessage):
         # Create fresh client for each request to avoid state issues
         username = os.getenv("PHENOML_USERNAME")
         password = os.getenv("PHENOML_PASSWORD") 
-        base_url = os.getenv("PHENOML_BASE_URL", "https://pheno-test.app.pheno.ml")
+        base_url = os.getenv("PHENOML_BASE_URL")
         agent_id = os.getenv("PHENOML_AGENT_ID")
         
         client = AsyncClient(

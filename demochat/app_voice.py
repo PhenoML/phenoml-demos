@@ -34,7 +34,7 @@ async def initialize_phenoml_client():
     username = os.getenv("PHENOML_USERNAME")
     password = os.getenv("PHENOML_PASSWORD")
     base_url = os.getenv("PHENOML_BASE_URL")
-    agent_id = os.getenv("PHENOML_AGENT_ID")
+    agent_id = os.getenv("PHENOML_VOICE_AGENT_ID")
     
     if not username or not password:
         raise ValueError("PHENOML_USERNAME and PHENOML_PASSWORD environment variables are required")
@@ -64,7 +64,7 @@ def get_phenoml_client():
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for VAPI
+    allow_origins=["*"],  # Allow all origins for VAPI. Don't do this in production!
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -131,13 +131,6 @@ async def health_check():
 @app.post("/chat/completions")
 async def chat_completions(request: VapiChatRequest, authenticated: bool = Depends(verify_api_key)):
     try:
-        print(f"=== VAPI REQUEST DEBUG ===")
-        print(f"Full request: {request.dict()}")
-        print(f"Stream requested: {getattr(request, 'stream', False)}")
-        print(f"Number of messages: {len(request.messages)}")
-        for i, msg in enumerate(request.messages):
-            print(f"Message {i}: {msg.role} -> {msg.content[:100]}")
-        print("=" * 30)
         # Extract the latest user message from the conversation
         user_messages = [msg for msg in request.messages if msg.role == "user"]
         if not user_messages:
@@ -154,14 +147,12 @@ async def chat_completions(request: VapiChatRequest, authenticated: bool = Depen
         
         # Look up existing PhenoML session_id
         phenoml_session_id = session_store.get(conversation_key)
-        print(f"Conversation key (from first user msg): {conversation_key}")
-        print(f"Using stored session_id: {phenoml_session_id}")
         
         # Create fresh client for each request
         username = os.getenv("PHENOML_USERNAME")
         password = os.getenv("PHENOML_PASSWORD") 
-        base_url = os.getenv("PHENOML_BASE_URL", "https://pheno-test.app.pheno.ml")
-        agent_id = os.getenv("PHENOML_AGENT_ID", "8220392-42f0-425a-8948-99e1231491ab")
+        base_url = os.getenv("PHENOML_BASE_URL")
+        agent_id = os.getenv("PHENOML_VOICE_AGENT_ID")
         
         client = AsyncClient(
             username=username,
@@ -273,4 +264,4 @@ async def shutdown_event():
             print(f"Error closing PhenoML client: {e}")
 
 if __name__ == "__main__":
-    uvicorn.run("app_vapi:app", host="0.0.0.0", port=8002, reload=True)
+    uvicorn.run("app_voice:app", host="0.0.0.0", port=8002, reload=True)
