@@ -1,4 +1,4 @@
-# phenoml Demos
+# phenoml demos
 
 This repository contains demos built with phenoml!
 
