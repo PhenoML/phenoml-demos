@@ -7,21 +7,20 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DEFAULT_WORKFLOW_ID = process.env.PHENOML_WORKFLOW_ID || 'your-workflow-id';
+const WORKFLOW_ID = process.env.WORKFLOW_ID;
 
 app.use(express.json());
 
 app.post('/execute-workflow', async (req, res) => {
   try {
-    const { workflow_id, input_data } = req.body;
+    const { input_data } = req.body;
 
     // Validate input_data is provided
     if (!input_data || typeof input_data !== 'object') {
       return res.status(400).json({ error: 'input_data object is required' });
     }
 
-    // Use provided workflow_id or fall back to default
-    const workflowId = workflow_id || DEFAULT_WORKFLOW_ID;
+    const workflowId = WORKFLOW_ID;
 
     // Get credentials from environment variables
     const username = process.env.PHENOML_USERNAME;
