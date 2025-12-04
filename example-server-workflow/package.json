@@ -1,0 +1,16 @@
+{
+  "name": "phenoml-simple-server",
+  "version": "1.0.0",
+  "description": "Simple server for executing PhenoML workflows",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "phenoml": "^0.0.7",
+    "dotenv": "^16.3.1"
+  }
+}
