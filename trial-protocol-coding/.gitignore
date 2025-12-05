@@ -1,0 +1,20 @@
+# User-specific VS Code settings
+.vscode/settings.json
+
+# Virtual environment (already in root .gitignore, but being explicit)
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+*.swp
+*.swo
+
