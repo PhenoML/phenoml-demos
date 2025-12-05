@@ -12,6 +12,15 @@ This repository contains demos built with phenoml!
 - Running this demo requires a phenoml subscription. If you're interested in more granular agent customization check out a [reference example](https://github.com/PhenoML/phenoml_workshop_a2a_mcp) of how to build agents using our lang2FHIR API tools. 
 - An example using a phenoml agent as a "bring your own LLM" with Vapi to add voice to your phenoml agent is demonstrated! See reference documentation from Vapi on connecting Vapi to a custom LLM [here](https://github.com/VapiAI/example-server-python-flask/blob/main/app/api/custom_llm.py). The voice agent is purely demonstrative and NOT intended for sensitive or production usage.
 
+### :hospital: Trial Protocol Coding
+**Location:** `trial-protocol-coding`
+
+**Key Features:**
+- Extracts procedure names from clinical trial protocol JSON data (from Azure Content Understanding analyzer)
+- Uses PhenoML Construe API to automatically code procedures with CPT codes
+- Demonstrates processing structured healthcare data and mapping to standardized coding systems
+- See the [README](trial-protocol-coding/README.md) for setup and usage instructions
+
 ### about phenoml
 :sparkles: [phenoml](https://phenoml.com/) is a developer platform for healthcare AI. 
 
