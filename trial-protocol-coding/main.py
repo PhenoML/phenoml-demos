@@ -21,7 +21,8 @@ def extract_procedure_names(data: dict) -> list[str]:
     """
     Extract procedure names from nested procedures_list structures in the JSON.
     
-    Navigates through: contents -> fields -> procedures_list -> valueArray 
+    Navigates through: contents -> fields -> ScheduleOfAssessments -> valueArray 
+                       -> valueObject -> procedures_list -> valueArray
                        -> valueObject -> procedure_name -> valueString
     """
     procedure_names = []
@@ -32,21 +33,31 @@ def extract_procedure_names(data: dict) -> list[str]:
             if 'fields' in content:
                 fields = content['fields']
                 
-                # Look for procedures_list in the fields
-                if 'procedures_list' in fields:
-                    procedures_list = fields['procedures_list']
+                # Look for ScheduleOfAssessments in the fields
+                if 'ScheduleOfAssessments' in fields:
+                    schedule = fields['ScheduleOfAssessments']
                     
-                    # Extract from valueArray
-                    if 'valueArray' in procedures_list:
-                        for item in procedures_list['valueArray']:
-                            if 'valueObject' in item:
-                                value_obj = item['valueObject']
+                    # Navigate through the schedule valueArray
+                    if 'valueArray' in schedule:
+                        for visit_item in schedule['valueArray']:
+                            if 'valueObject' in visit_item:
+                                visit_obj = visit_item['valueObject']
                                 
-                                # Get procedure_name if it has valueString
-                                if 'procedure_name' in value_obj:
-                                    proc_name = value_obj['procedure_name']
-                                    if 'valueString' in proc_name:
-                                        procedure_names.append(proc_name['valueString'])
+                                # Look for procedures_list within each visit
+                                if 'procedures_list' in visit_obj:
+                                    procedures_list = visit_obj['procedures_list']
+                                    
+                                    # Extract from procedures valueArray
+                                    if 'valueArray' in procedures_list:
+                                        for proc_item in procedures_list['valueArray']:
+                                            if 'valueObject' in proc_item:
+                                                proc_obj = proc_item['valueObject']
+                                                
+                                                # Get procedure_name if it has valueString
+                                                if 'procedure_name' in proc_obj:
+                                                    proc_name = proc_obj['procedure_name']
+                                                    if 'valueString' in proc_name:
+                                                        procedure_names.append(proc_name['valueString'])
     
     return procedure_names
 
