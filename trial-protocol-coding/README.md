@@ -6,6 +6,18 @@ A demo application that extracts procedure names from clinical trial protocol JS
 
 This script processes a JSON response from a clinical trial protocol analyzer, extracts procedure names from the Schedule of Assessments, and uses the PhenoML Construe API to map each procedure to appropriate CPT codes. Procedures that don't have CPT codes (typically administrative tasks) are logged as such.
 
+### Data Source
+
+The input data comes from an Azure Content Understanding analyzer that processes clinical trial protocol PDFs and extracts structured information. The analyzer (not included in this repository) uses [Azure Document Intelligence](https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/) to parse PDF documents and return structured JSON responses containing procedure data, visit schedules, and other protocol information.
+
+The protocol document used in this demo was sourced from [ClinicalTrials.gov](https://clinicaltrials.gov/), a public database of clinical trials. The sample PDF (`data/Pfizer-1_split.pdf`) is a 3-page excerpt from a full protocol document (over 100 pages) containing the Schedule of Activities section, which is sufficient to demonstrate the procedure extraction and coding workflow.
+
+This demo includes:
+- A sample PDF protocol document (`data/Pfizer-1_split.pdf`)
+- The JSON response from the analyzer (`data/response_a2e1dd9a-51c6-4f85-835e-27577a784438.json`)
+
+For more information about building custom analyzers with Azure, see the [Microsoft Azure Document Intelligence documentation](https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/).
+
 ## Prerequisites
 
 - Python 3.11+
@@ -29,7 +41,7 @@ This script processes a JSON response from a clinical trial protocol analyzer, e
    See `.env.example` for a template.
 
 3. **Ensure data file exists:**
-   The script expects a JSON file at `data/response_a2e1dd9a-51c6-4f85-835e-27577a784438.json`. This should be a response from a clinical trial protocol analyzer containing procedure data.
+   The script expects a JSON file at `data/response_a2e1dd9a-51c6-4f85-835e-27577a784438.json`. A sample PDF and JSON response are included in the `data/` directory.
 
 ## Usage
 
