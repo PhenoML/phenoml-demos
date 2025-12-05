@@ -5,10 +5,13 @@ Extracts procedure names from JSON and uses PhenoML to code them with CPT codes.
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 from phenoml import Client
+from phenoml.construe import ExtractCodesResult
+from pydantic import ValidationError
 
 
 def load_json_file(filepath: str) -> dict:
@@ -62,7 +65,7 @@ def extract_procedure_names(data: dict) -> list[str]:
     return procedure_names
 
 
-def code_procedure(client: Client, procedure_text: str) -> dict:
+def code_procedure(client: Client, procedure_text: str) -> ExtractCodesResult:
     """
     Use PhenoML construe to extract CPT codes for a procedure.
     
@@ -71,7 +74,7 @@ def code_procedure(client: Client, procedure_text: str) -> dict:
         procedure_text: The procedure name/description to code
         
     Returns:
-        Response from the construe API
+        ExtractCodesResult from the construe API
     """
     response = client.construe.extract_codes(
         text=procedure_text,
@@ -92,6 +95,13 @@ def code_procedure(client: Client, procedure_text: str) -> dict:
 
 def main():
     """Main execution function."""
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
     # Load environment variables
     load_dotenv()
     
@@ -120,21 +130,35 @@ def main():
     
     # Extract procedure names
     procedures = extract_procedure_names(data)
-    print(f"Found {len(procedures)} procedures with names")
+    logger.info(f"Found {len(procedures)} procedures with names\n")
     
     # Process each procedure
     for i, procedure_name in enumerate(procedures, 1):
-        print(f"\n[{i}/{len(procedures)}] Processing: {procedure_name}")
+        logger.info(f"[{i}/{len(procedures)}] Processing: {procedure_name}")
         
         try:
             result = code_procedure(client, procedure_name)
-            print(f"  ✓ Coded successfully")
-            # TODO: Store or display results as needed
+            
+            # Check if codes were found
+            if result.codes:
+                logger.info(f"  ✓ Found {len(result.codes)} CPT code(s):")
+                for code in result.codes:
+                    logger.info(f"    - {code.code}: {code.description}")
+                    if code.rationale:
+                        logger.info(f"      Rationale: {code.rationale}")
+            else:
+                logger.info("  ○ No CPT codes found (likely administrative procedure)")
+            
+        except ValidationError:
+            # Handle the case where API returns None instead of empty list
+            logger.info("  ○ No CPT codes found (likely administrative procedure)")
             
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            logger.error(f"  ✗ Error: {e}")
+        
+        logger.info("")  # Empty line between procedures
     
-    print("\nDone!")
+    logger.info("Done!")
 
 
 if __name__ == "__main__":
