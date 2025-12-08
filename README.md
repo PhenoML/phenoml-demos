@@ -15,6 +15,8 @@ This repository contains demos built with phenoml!
 ### :hospital: Trial Protocol Coding
 **Location:** `trial-protocol-coding`
 
+**Contributed by**: [@mattkoch614](https://github.com/mattkoch614)
+
 **Key Features:**
 - Extracts procedure names from clinical trial protocol JSON data (from Azure Content Understanding analyzer)
 - Uses PhenoML Construe API to automatically code procedures with CPT codes
