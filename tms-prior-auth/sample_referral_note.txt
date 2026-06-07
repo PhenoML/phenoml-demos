@@ -1,0 +1,46 @@
+REFERRAL FOR REPETITIVE TRANSCRANIAL MAGNETIC STIMULATION (rTMS) EVALUATION
+
+Date: 2026-05-20
+Referring provider: Dr. Alan Reyes, MD - Greenfield Behavioral Health
+Patient: Maria Garcia
+DOB: 1985-07-22 | Sex: Female | MRN: GBH-4471
+Insurance: Blue Cross Blue Shield of Massachusetts (Commercial HMO)
+
+REASON FOR REFERRAL
+Treatment-resistant major depressive disorder; evaluation for repetitive
+transcranial magnetic stimulation (rTMS) and prior authorization.
+
+HISTORY OF PRESENT ILLNESS
+Ms. Garcia is a 40-year-old woman with recurrent major depressive disorder,
+current episode severe without psychotic features (ICD-10 F33.2). The current
+episode began approximately 14 months ago. She reports persistent low mood,
+anhedonia, initial and middle insomnia, poor concentration, low energy, and
+passive thoughts of worthlessness. She denies active suicidal ideation, plan, or
+intent. No history of mania or hypomania.
+
+STANDARDIZED RATING SCALES
+- PHQ-9 (2026-05-12): 22 (severe)
+- MADRS (2026-05-12): 31 (severe)
+
+MEDICATION TRIALS (CURRENT EPISODE)
+1. Sertraline 200 mg daily x 10 weeks (adequate dose and duration) - no
+   meaningful response; PHQ-9 remained > 18.
+2. Venlafaxine XR 225 mg daily x 9 weeks (adequate dose and duration) - minimal
+   response, discontinued.
+3. Bupropion XL 300 mg - discontinued after 2 weeks due to intolerable agitation
+   and insomnia.
+
+ASSESSMENT
+Recurrent major depressive disorder, severe, treatment-resistant. The patient is
+interested in rTMS. No current psychotic features. Not acutely suicidal.
+
+PLAN
+Refer for rTMS evaluation and prior authorization.
+
+----------------------------------------------------------------------------
+NOTE FOR THE DEMO: This referral documents the diagnosis/severity (criterion 1)
+and failed/intolerable medication trials (criterion 2), but does NOT document a
+psychotherapy trial (criterion 3) or a contraindication screen (seizure history,
+implanted devices). The referral agent in Step 1 should detect these gaps and ask
+follow-up questions; the answers are then written back to the EHR as FHIR
+resources before the prior-auth evaluation in Step 2.
