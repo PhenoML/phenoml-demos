@@ -52,15 +52,22 @@ def as_dict(obj):
     return obj
 
 
-def parse_json(text: str):
+def parse_json(text: str) -> dict:
+    """Best-effort: pull the first JSON object out of an LLM reply. ALWAYS returns a dict
+    (empty if none can be recovered) so every caller can safely .get() the result — a stray
+    top-level array or scalar must never reach the .get()s in score_case/cite_hits."""
     try:
-        return json.loads(text)
+        v = json.loads(text)
+        if isinstance(v, dict):
+            return v
     except Exception:
         pass
-    m = re.search(r"\{.*\}|\[.*\]", text or "", re.DOTALL)
+    m = re.search(r"\{.*\}", text or "", re.DOTALL)
     if m:
         try:
-            return json.loads(m.group(0))
+            v = json.loads(m.group(0))
+            if isinstance(v, dict):
+                return v
         except Exception:
             pass
     return {}
