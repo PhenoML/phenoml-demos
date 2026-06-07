@@ -13,11 +13,13 @@ import httpx
 from dotenv import dotenv_values
 from phenoml import PhenomlClient
 
+HERE = Path(__file__).resolve().parent   # anchor file paths to the script dir, not the cwd
+
 
 # ---------- config / auth -------------------------------------------------
 def load_env() -> dict:
     env = dict(os.environ)                       # real env vars are the base layer
-    for p in (Path("../.env"), Path(".env")):   # .env files override env vars
+    for p in (HERE.parent / ".env", HERE / ".env"):   # .env files override env vars; local wins
         if p.exists():
             env.update({k: (v or "").strip().strip('"').strip("'")
                         for k, v in dotenv_values(p).items()})
@@ -64,10 +66,6 @@ def parse_json(text: str):
     return {}
 
 
-def clip(s: str, n: int = 6000) -> str:
-    return s if len(s) <= n else s[:n] + "\n...[truncated]"
-
-
 def banner(title: str):
     print("\n" + "=" * 78 + f"\n{title}\n" + "=" * 78, flush=True)
 
@@ -96,8 +94,8 @@ def main():
 
     # --- Step 1.1: document/multi (text fallback; no PDF asset here) -----
     banner("STEP 1.1  Referral note -> FHIR bundle (lang2fhir.create_multi)")
-    note = Path("sample_referral_note.txt").read_text()
-    cache = Path(".cache_bundle.json")
+    note = (HERE / "sample_referral_note.txt").read_text()
+    cache = HERE / ".cache_bundle.json"
     if cache.exists():
         print("(using cached bundle from .cache_bundle.json — delete it to re-extract)")
         cached = json.loads(cache.read_text())
@@ -187,7 +185,7 @@ def main():
 
     # --- Step 1.5: BCBS-MA policy agent ---------------------------------
     banner("STEP 1.5  Create BCBS-MA policy #297 agent")
-    policy_text = Path("policy_297_tms.md").read_text()
+    policy_text = (HERE / "policy_297_tms.md").read_text()
     bcbs_prompt = client.agent.prompts.create(
         name="bcbs-ma-policy-297",
         content=("You are a BCBS-MA utilization-management reviewer. Apply the following policy "
@@ -201,9 +199,12 @@ def main():
     print("BCBS agent:", bcbs_agent.data.id)
 
     # --- Step 2.1: prior-auth evaluation --------------------------------
-    banner("STEP 2.1  Prior-auth evaluation by the BCBS agent")
+    banner("STEP 2.1  Prior-auth evaluation (full evidence, then psychotherapy dropped -> flip)")
     # The prior-auth agent needs the IPS *plus* the medication trial history (criterion #2 evidence)
     # plus the follow-up answers — all in the MESSAGE.
+    PA_PROMPT = ('A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the '
+                 'patient below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
+                 '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n')
     pa_evidence = (
         "=== INTERNATIONAL PATIENT SUMMARY ===\n" + ips_text
         + "\n\n=== MEDICATION TRIAL HISTORY (from chart) ===\n" + med_history_text
@@ -211,14 +212,22 @@ def main():
         + "\n".join(f"- {a}" for a in follow_up_answers)
     )
     pa = retry(client.agent.chat.send, label="pa.eval",
-        agent_id=bcbs_agent.data.id,
-        message=('A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the '
-                 'patient below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
-                 '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n'
-                 + pa_evidence),
-        enhanced_reasoning=True,
-    )
+        agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence, enhanced_reasoning=True)
+    print("APPROVE-PATH (all evidence on file):")
     print(json.dumps(parse_json(pa.response), indent=2)[:2000])
+
+    # Flip the decision: same patient, same agent, but DROP the psychotherapy answer
+    # (follow_up_answers[0] = the CBT course, the only evidence for criterion #3) -> meets_criteria=false.
+    pa_evidence_no_psych = (
+        "=== INTERNATIONAL PATIENT SUMMARY ===\n" + ips_text
+        + "\n\n=== MEDICATION TRIAL HISTORY (from chart) ===\n" + med_history_text
+        + "\n\n=== ADDITIONAL FOLLOW-UP INFORMATION ON FILE ===\n"
+        + "\n".join(f"- {a}" for a in follow_up_answers[1:])      # psychotherapy answer dropped
+    )
+    pa_flip = retry(client.agent.chat.send, label="pa.eval.flip",
+        agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence_no_psych, enhanced_reasoning=True)
+    print("\nFLIP-PATH (psychotherapy answer dropped -> expect meets_criteria=false):")
+    print(json.dumps(parse_json(pa_flip.response), indent=2)[:2000])
 
     # --- Step 2.2: workflow alternative ---------------------------------
     banner("STEP 2.2  Workflow alternative (create + execute)")
@@ -258,8 +267,8 @@ def main():
         "patient": f"Patient/{patient_id}" if patient_id else "Patient/example",
         "requested_service": "rTMS for treatment-resistant major depressive disorder",
         "cpt_codes": [c.get("code") for c in cpt_codes][:3],
-        "clinical_summary": clip(ips_text),
-        "medication_trial_history": clip(med_history_text),
+        "clinical_summary": ips_text,
+        "medication_trial_history": med_history_text,
         "supporting_evidence": follow_up_answers,
     }
 

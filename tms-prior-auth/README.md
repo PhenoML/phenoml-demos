@@ -242,18 +242,32 @@ pa_evidence = (
     + "\n\n=== ADDITIONAL FOLLOW-UP INFORMATION ON FILE ===\n"
     + "\n".join(f"- {a}" for a in follow_up_answers)
 )
+PA_PROMPT = ('A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the patient '
+             'below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
+             '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n')
 pa = client.agent.chat.send(
-    agent_id=bcbs_agent.data.id,
-    message='A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the patient '
-            'below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
-            '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n'
-            + pa_evidence,
-    enhanced_reasoning=True,
-)
+    agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence, enhanced_reasoning=True)
 print(json.dumps(parse_json(pa.response), indent=2))
 ```
 
-> **Verified output:** `"meets_criteria": true` — satisfied: Criterion 1 (severe MDD + rating scale), Criterion 2a (sertraline + venlafaxine failures), Criterion 3 (CBT trial), and no contraindications. Drop the psychotherapy answer and re-run to watch it flip to `false` with `additional_info_needed`.
+> **Verified output:** `"meets_criteria": true` — satisfied: Criterion 1 (severe MDD + rating scale), Criterion 2a (sertraline + venlafaxine failures), Criterion 3 (CBT trial), and no contraindications.
+
+**Flip the decision — same patient, same agent, less evidence.** Drop the psychotherapy follow-up answer (the only evidence for criterion #3) and re-run the *same* eval:
+
+```python
+# follow_up_answers[0] is the CBT/psychotherapy answer; keep only the contraindication screen.
+pa_evidence_no_psych = (
+    "=== INTERNATIONAL PATIENT SUMMARY ===\n" + ips_text
+    + "\n\n=== MEDICATION TRIAL HISTORY (from chart) ===\n" + med_history_text
+    + "\n\n=== ADDITIONAL FOLLOW-UP INFORMATION ON FILE ===\n"
+    + "\n".join(f"- {a}" for a in follow_up_answers[1:])      # psychotherapy answer dropped
+)
+pa_flip = client.agent.chat.send(
+    agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence_no_psych, enhanced_reasoning=True)
+print(json.dumps(parse_json(pa_flip.response), indent=2))
+```
+
+> **Expected output:** `"meets_criteria": false` — criteria 1 & 2 and the contraindication screen still pass, but criterion #3 (psychotherapy trial) moves to `unmet` and `additional_info_needed` asks for documentation of an adequate psychotherapy trial. Same patient, same agent — only the evidence changed. (It's an LLM with `enhanced_reasoning=True`, so the rationale wording varies run-to-run; the flip direction is stable.)
 
 ### 2.2 · Workflow alternative (deterministic, repeatable)
 
@@ -339,6 +353,68 @@ print("DENY-PATH:\n", denied.response)
 ```
 
 > **Verified output:** denied — the agent correctly cites *mild* MDD with no rating scale, only one medication trial (criterion 2 needs two), and no psychotherapy trial. (Per policy #297, a request that doesn't meet criteria is **Investigational**, which the agent often uses as the decision term.)
+
+---
+
+## Step 4 — Determinism & evals
+
+A payer won't run an automated prior-auth they can't trust, and "trust" is two concrete questions:
+
+1. **Is it consistent?** The same clinical facts must produce the same decision every time — it can't approve a case on Monday and deny it on Tuesday.
+2. **Is it correct?** The decisions have to match expert adjudication on a labeled set.
+
+The pipeline answers these *per layer*, because the layers have different determinism profiles:
+
+| Layer | SDK call | Determinism | How we show it |
+|-------|----------|-------------|----------------|
+| Structured extraction | `lang2fhir.create_multi`, `summary.create` | Schema-constrained, reproducible | (opt-in) re-extract, compare the resource shape |
+| Medical coding | `construe.codes.extract` | Schema-constrained | run K×, show CPT **90867** is stable |
+| **Judgment** | `agent.chat.send` (policy #297) | Stochastic | run K×, **measure** decision/code agreement |
+
+> **Honesty note that lands well with technical buyers:** the SDK exposes **no temperature/seed/model knob**, so we don't *claim* forced determinism on the LLM step. We **isolate** the deterministic substrate (coding + extraction, which are schema-constrained) from the judgment layer, and **measure** the judgment layer's stability empirically. That's the defensible story for any LLM-in-the-loop adjudication.
+
+### Run it
+
+`evals/run_evals.py` pins each case's clinical inputs (frozen submissions under `evals/cases/`) and exercises **just the adjudication step** K times each, then scores accuracy vs. gold and stability across repeats.
+
+```bash
+.venv/bin/python evals/run_evals.py --validate            # load + check cases, NO API calls
+.venv/bin/python evals/run_evals.py                       # K = EVAL_REPEATS (default 5)
+EVAL_REPEATS=3 .venv/bin/python evals/run_evals.py        # quicker pass
+.venv/bin/python evals/run_evals.py --case deny-mild-mdd  # one case, fast iteration
+EVAL_CHECK_EXTRACTION=1 .venv/bin/python evals/run_evals.py  # also re-extract FHIR K× (slow)
+```
+
+> Run under the demo's **`.venv`** (SDK v15). It creates its own throwaway policy #297 agent and deletes it on exit; adjudicate-only means **no EHR writes**, so it runs on a shared instance.
+
+### What it prints
+
+```
+CASE                         EXPECT   DECISION (k runs)    CODES          CITED  STABLE
+approve-maria-garcia         APPROVED APPROVED 5/5         90867 ✓        3/3    ✓
+deny-mild-mdd                DENIED   DENIED 5/5           — ✓            2/2    ✓
+deny-missing-psychotherapy   DENIED   DENIED 5/5           — ✓            1/1    ✓
+deny-contraindication        DENIED   DENIED 5/5           — ✓            3/3    ✓
+---------------------------------------------------------------------------------------
+Decision accuracy:   4/4  (100%)
+Decision stability:  20/20 runs agree  (100%)
+Structured layer (construe CPT):    90867 — stable 5/5  (✓)
+```
+
+It also writes `evals/report.md` (shareable) and `evals/report.json`. *(Stability numbers are measured per run — a flipped repeat shows up as `4/5 ⚠` and a `✗` in STABLE, which is exactly the signal you want.)*
+
+### The case set
+
+Four labeled cases, one JSON each in `evals/cases/`, every input frozen from the live demo run:
+
+| Case | Exercises | Gold |
+|------|-----------|------|
+| `approve-maria-garcia` | criteria 1 + 2a + 3 met, screen clear | **APPROVED**, `90867` |
+| `deny-mild-mdd` | mild MDD, 1 trial, no scale, no therapy | **DENIED** |
+| `deny-missing-psychotherapy` | 1 & 2 met, criterion 3 absent (the "drop the psychotherapy answer" flip) | **DENIED** |
+| `deny-contraindication` | 1/2/3 met but seizure hx + implanted device | **DENIED** |
+
+Each case carries `expected.decision`, `expected.covered_codes`, and a soft `must_cite_any` (citation keywords we expect in the rationale). **Add a case** by dropping another JSON in `evals/cases/` — no code changes.
 
 ---
 

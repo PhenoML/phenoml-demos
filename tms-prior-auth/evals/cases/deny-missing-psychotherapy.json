@@ -1,0 +1,18 @@
+{
+  "id": "deny-missing-psychotherapy",
+  "description": "Same severe MDD + two failed medication trials as the approve case (criteria 1 & 2 met) but the psychotherapy answer is REMOVED, so criterion 3 (failed trial of psychotherapy) is undocumented. This is the README's 'drop the psychotherapy answer and watch it flip' case. Should DENY and cite the missing psychotherapy trial.",
+  "submission": {
+    "requested_service": "rTMS for treatment-resistant major depressive disorder",
+    "cpt_codes": ["90867"],
+    "clinical_summary": "Patient: Maria Garcia (DOB: 1985-07-22, 40 years old)\nGender: Female\nMRN: GBH-4471\n\n## Allergies and Intolerances\n• No known allergies\n\n## Medication List\n• No known medications\n\n## Problem List\n• Major depressive disorder, recurrent severe without psychotic features\n\n## General Observations\n• Mood interview total severity score during assessment period [CMS Assessment]: 31",
+    "medication_trial_history": "- Sertraline 200 mg daily for 10 weeks during the current episode — no meaningful response (PHQ-9 remained > 18).\n- Venlafaxine XR 225 mg daily for 9 weeks — minimal response, discontinued.\n- Bupropion XL 300 mg — discontinued after 2 weeks due to intolerable agitation and insomnia.",
+    "supporting_evidence": [
+      "No personal or family history of seizures and no implanted magnetic-sensitive devices; no psychotic features in the current episode."
+    ]
+  },
+  "expected": {
+    "decision": "DENIED",
+    "covered_codes": [],
+    "must_cite_any": ["psychotherapy"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "deny-mild-mdd",
+  "description": "The demo's denied case (run_demo.py): MILD MDD, a single 4-week antidepressant trial, no psychotherapy, and no standardized rating scale. Fails criteria 1, 2 and 3. Should DENY (policy term: Investigational) with no covered codes.",
+  "submission": {
+    "requested_service": "rTMS for depression",
+    "clinical_summary": "Mild major depressive disorder. One antidepressant trial (sertraline) for 4 weeks. No psychotherapy trial. No standardized rating scale on file."
+  },
+  "expected": {
+    "decision": "DENIED",
+    "covered_codes": [],
+    "must_cite_any": ["rating scale", "psychotherapy"]
+  }
+}
