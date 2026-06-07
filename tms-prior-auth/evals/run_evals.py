@@ -26,7 +26,7 @@ from pathlib import Path
 # `if __name__ == "__main__"` guard), so importing it is side-effect free.
 DEMO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(DEMO_ROOT))
-from run_demo import load_env, make_client, as_dict, parse_json, retry, banner  # noqa: E402
+from run_demo import load_env, make_client, as_dict, parse_json, retry, banner, resolve_provider  # noqa: E402
 from phenoml.construe import ExtractRequestSystem  # noqa: E402
 
 EVALS_DIR = Path(__file__).resolve().parent
@@ -55,6 +55,10 @@ def normalize_decision(s: str) -> str:
         return "EMPTY"
     if t == "ERROR":
         return "ERROR"
+    # Explicit denial wording wins over the APPROV substring below, so "NOT APPROVED"
+    # and "DENIED - NO APPROVAL" aren't miscounted as approvals.
+    if "DENI" in t or "DENY" in t or "INVESTIGATIONAL" in t or "NOT APPROV" in t:
+        return "DENIED"
     if "APPROV" in t:
         return "APPROVED"
     if "MEDICALLY NECESSARY" in t and "NOT" not in t:
@@ -121,27 +125,6 @@ def load_cases(case_filter=None) -> list:
         if not cases:
             sys.exit(f"no case with id '{case_filter}'")
     return cases
-
-
-def resolve_provider(client, env):
-    """agent.create requires a FHIR provider id (even adjudicate-only, which never writes to it).
-    Prefer the .env value; otherwise borrow the first configured provider. Passing an empty string
-    makes agent.create 500, so we never do that."""
-    p = env.get("PHENOML_FHIR_PROVIDER_ID") or env.get("FHIR_PROVIDER_ID") or ""
-    if p:
-        return p
-    try:
-        provs = as_dict(client.fhir_provider.list()).get("fhir_providers") or []
-    except Exception as e:
-        provs = []
-        print(f"[provider] lookup failed: {type(e).__name__}: {str(e)[:120]}")
-    if provs:
-        pid = provs[0].get("id")
-        print(f"[provider] none set in .env — borrowing first configured provider {pid} "
-              f"(adjudicate-only never writes to it)")
-        return pid
-    sys.exit("agent.create requires a FHIR provider, but none is set and none could be discovered. "
-             "Set PHENOML_FHIR_PROVIDER_ID in .env.")
 
 
 def create_bcbs_agent(client, provider):

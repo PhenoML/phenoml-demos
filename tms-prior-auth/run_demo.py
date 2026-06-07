@@ -83,12 +83,32 @@ def retry(fn, *args, attempts=3, base=4, label="", **kwargs):
             time.sleep(wait)
 
 
+def resolve_provider(client, env) -> str:
+    """Resolve a FHIR provider id for agent.create / fhir.create. Prefer the .env value;
+    otherwise borrow the first provider from fhir_provider.list(). agent.create 500s on an
+    empty provider string, so if none can be found we exit with guidance instead."""
+    p = env.get("PHENOML_FHIR_PROVIDER_ID") or env.get("FHIR_PROVIDER_ID") or ""
+    if p:
+        print(f"[fhir provider] {p}")
+        return p
+    try:
+        provs = as_dict(client.fhir_provider.list()).get("fhir_providers") or []
+    except Exception as e:
+        provs = []
+        print(f"[provider] lookup failed: {type(e).__name__}: {str(e)[:120]}")
+    if provs:
+        pid = provs[0].get("id")
+        print(f"[fhir provider] none set in .env — borrowing first configured provider {pid}")
+        return pid
+    sys.exit("agent.create requires a FHIR provider, but none is set and none could be "
+             "discovered. Set PHENOML_FHIR_PROVIDER_ID in .env (see .env.example).")
+
+
 # ---------- pipeline ------------------------------------------------------
 def main():
     env = load_env()
     client = make_client(env)
-    provider = env.get("PHENOML_FHIR_PROVIDER_ID") or env.get("FHIR_PROVIDER_ID") or ""
-    print(f"[fhir provider] {provider or '(none — agent/FHIR steps may use sandbox default)'}")
+    provider = resolve_provider(client, env)
 
     created = {"agents": [], "prompts": []}
 
@@ -120,6 +140,9 @@ def main():
     patients = [e["resource"] for e in bundle.get("entry", [])
                 if e.get("resource", {}).get("resourceType") == "Patient"]
     print(f"patients in bundle: {len(patients)}")
+    if len(patients) != 1:
+        sys.exit(f"expected exactly 1 Patient in the bundle, found {len(patients)}; the IPS + "
+                 "EHR steps assume a single patient. Delete .cache_bundle.json to re-extract.")
     ips = retry(client.summary.create, label="summary.create", fhir_resources=bundle, mode="ips")
     ips_text = ips.summary or ""
     print(ips_text[:1500])

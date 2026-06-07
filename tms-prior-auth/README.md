@@ -389,19 +389,22 @@ EVAL_CHECK_EXTRACTION=1 .venv/bin/python evals/run_evals.py  # also re-extract F
 
 ### What it prints
 
+Actual output from a 3-repeat run against the live instance:
+
 ```
-CASE                         EXPECT   DECISION (k runs)    CODES          CITED  STABLE
-approve-maria-garcia         APPROVED APPROVED 5/5         90867 ✓        3/3    ✓
-deny-mild-mdd                DENIED   DENIED 5/5           — ✓            2/2    ✓
-deny-missing-psychotherapy   DENIED   DENIED 5/5           — ✓            1/1    ✓
-deny-contraindication        DENIED   DENIED 5/5           — ✓            3/3    ✓
+CASE                        EXPECT    DECISION (k runs)    CODES          CITED  STABLE
+---------------------------------------------------------------------------------------
+approve-maria-garcia        APPROVED  APPROVED 3/3         90867 ✓        3/3    ✓
+deny-contraindication       DENIED    DENIED 3/3           — ✓            3/3    ✓
+deny-mild-mdd               DENIED    DENIED 3/3           — ✓            2/2    ✓
+deny-missing-psychotherapy  DENIED    DENIED 3/3           — ✓            1/1    ✓
 ---------------------------------------------------------------------------------------
 Decision accuracy:   4/4  (100%)
-Decision stability:  20/20 runs agree  (100%)
-Structured layer (construe CPT):    90867 — stable 5/5  (✓)
+Decision stability:  12/12 runs agree  (100%)
+Structured layer (construe CPT):    90867 — stable 3/3  (✓)
 ```
 
-It also writes `evals/report.md` (shareable) and `evals/report.json`. *(Stability numbers are measured per run — a flipped repeat shows up as `4/5 ⚠` and a `✗` in STABLE, which is exactly the signal you want.)*
+It also writes `evals/report.md` (shareable) and `evals/report.json`. *(Stability is measured per run — a flipped repeat shows up as `2/3 ⚠` and a `✗` in STABLE, which is exactly the signal you want.)*
 
 ### The case set
 
