@@ -2,13 +2,11 @@
 """End-to-end runner for the TMS prior-auth demo (PhenoML SDK v15).
 
 Reads credentials from tms-prior-auth/.env (preferred) or the repo-root ../.env.
-Supports both auth modes:
-  - v15 native:  PHENOML_CLIENT_ID + PHENOML_CLIENT_SECRET   (OAuth client credentials)
-  - legacy:      PHENOML_USERNAME  + PHENOML_PASSWORD         (Basic auth -> /auth/token)
+Auth: PHENOML_CLIENT_ID + PHENOML_CLIENT_SECRET (OAuth client credentials, v15-native).
 
 Run:  .venv/bin/python run_demo.py
 """
-import base64, json, os, re, sys, time
+import json, os, re, sys, time
 from pathlib import Path
 
 import httpx
@@ -26,32 +24,18 @@ def load_env() -> dict:
     return env
 
 
-def mint_legacy_token(base_url: str, username: str, password: str) -> str:
-    cred = base64.b64encode(f"{username}:{password}".encode()).decode()
-    r = httpx.post(f"{base_url}/auth/token",
-                   headers={"Authorization": f"Basic {cred}", "content-type": "application/json"},
-                   timeout=30)
-    r.raise_for_status()
-    return r.json()["token"]
-
-
 def make_client(env: dict) -> PhenomlClient:
     base_url = env.get("PHENOML_BASE_URL") or None
     cid, csec = env.get("PHENOML_CLIENT_ID"), env.get("PHENOML_CLIENT_SECRET")
-    user, pw = env.get("PHENOML_USERNAME"), env.get("PHENOML_PASSWORD")
     # max_retries=0 turns OFF the SDK's *silent* auto-retry; the explicit retry() wrapper below is
     # the single, visible retry layer (so a flaky call never silently double-fires document/multi).
-    kw = {"timeout": float(os.environ.get("PHENOML_TIMEOUT", "300")), "max_retries": 0}
+    kw = {"timeout": float(env.get("PHENOML_TIMEOUT", "300")), "max_retries": 0}
     if base_url:
         kw["base_url"] = base_url
     if cid and csec:
         print(f"[auth] OAuth client credentials (base_url={base_url})")
         return PhenomlClient(client_id=cid, client_secret=csec, **kw)
-    if user and pw:
-        print(f"[auth] legacy username/password -> /auth/token (base_url={base_url})")
-        token = mint_legacy_token(base_url, user, pw)
-        return PhenomlClient(token=lambda: token, **kw)
-    sys.exit("No credentials found. Set PHENOML_CLIENT_ID/_SECRET or PHENOML_USERNAME/_PASSWORD in .env")
+    sys.exit("No credentials found. Set PHENOML_CLIENT_ID and PHENOML_CLIENT_SECRET in .env (see .env.example)")
 
 
 # ---------- helpers -------------------------------------------------------
@@ -70,8 +54,18 @@ def parse_json(text: str):
     try:
         return json.loads(text)
     except Exception:
-        m = re.search(r"\{.*\}|\[.*\]", text or "", re.DOTALL)
-        return json.loads(m.group(0)) if m else {}
+        pass
+    m = re.search(r"\{.*\}|\[.*\]", text or "", re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return {}
+
+
+def clip(s: str, n: int = 6000) -> str:
+    return s if len(s) <= n else s[:n] + "\n...[truncated]"
 
 
 def banner(title: str):
@@ -229,7 +223,7 @@ def main():
     # --- Step 2.2: workflow alternative ---------------------------------
     banner("STEP 2.2  Workflow alternative (create + execute)")
     try:
-        if os.environ.get("SKIP_WORKFLOW"):
+        if env.get("SKIP_WORKFLOW"):
             raise RuntimeError("skipped via SKIP_WORKFLOW env")
         wf = client.workflows.create(
             name="TMS PA - gather supporting evidence",
@@ -264,8 +258,8 @@ def main():
         "patient": f"Patient/{patient_id}" if patient_id else "Patient/example",
         "requested_service": "rTMS for treatment-resistant major depressive disorder",
         "cpt_codes": [c.get("code") for c in cpt_codes][:3],
-        "clinical_summary": ips_text,
-        "medication_trial_history": med_history_text,
+        "clinical_summary": clip(ips_text),
+        "medication_trial_history": clip(med_history_text),
         "supporting_evidence": follow_up_answers,
     }
 
@@ -275,7 +269,7 @@ def main():
         message=('Adjudicate this prior-authorization submission under policy #297. Respond ONLY as '
                  'JSON: {"decision":"APPROVED"|"DENIED","covered_codes":[...],"rationale":"...",'
                  '"policy_citations":[...],"conditions_or_limits":"..."}\n\nSUBMISSION:\n'
-                 + json.dumps(submission, indent=2)[:9000]),
+                 + json.dumps(submission, indent=2)),
         enhanced_reasoning=True)
     print("APPROVE-PATH:\n", decision.response)
 

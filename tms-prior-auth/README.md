@@ -34,15 +34,11 @@ pip install phenoml python-dotenv          # SDK v15+
 cp .env.example .env                        # then fill in your credentials
 ```
 
-`.env` — the SDK uses **OAuth client credentials**; this demo also supports the **legacy username/password** login (Basic auth → token) since some accounts still use it:
+`.env` — the SDK uses **OAuth client credentials** (v15-native):
 
 ```
-# preferred (v15-native):
 PHENOML_CLIENT_ID=...
 PHENOML_CLIENT_SECRET=...
-# OR legacy login:
-PHENOML_USERNAME=...
-PHENOML_PASSWORD=...
 
 PHENOML_BASE_URL=https://your-instance.app.pheno.ml   # blank = SDK default
 PHENOML_FHIR_PROVIDER_ID=<a FHIR provider UUID>        # client.fhir_provider.list() to find one
@@ -57,35 +53,21 @@ The snippets run **top to bottom in one Python session**. (A consolidated runner
 ```python
 import base64, json, os, re
 from pathlib import Path
-import httpx
 from dotenv import load_dotenv
 from phenoml import PhenomlClient            # async apps: from phenoml import AsyncPhenomlClient
 
 load_dotenv()
 
-def mint_legacy_token(base_url, username, password):
-    """Legacy accounts: Basic-auth the username/password against /auth/token to get a JWT."""
-    cred = base64.b64encode(f"{username}:{password}".encode()).decode()
-    r = httpx.post(f"{base_url}/auth/token",
-                   headers={"Authorization": f"Basic {cred}", "content-type": "application/json"},
-                   timeout=30)
-    r.raise_for_status()
-    return r.json()["token"]
-
 def make_client() -> PhenomlClient:
     base_url = os.environ.get("PHENOML_BASE_URL") or None
     cid, csec = os.environ.get("PHENOML_CLIENT_ID"), os.environ.get("PHENOML_CLIENT_SECRET")
-    user, pw = os.environ.get("PHENOML_USERNAME"), os.environ.get("PHENOML_PASSWORD")
     # timeout matters: multi-resource extraction + agent reasoning routinely exceed the ~60s default.
     kw = {"timeout": 300.0, "max_retries": 2}   # single retry layer (the SDK's); bounded so a flaky call won't spam document/multi
     if base_url:
         kw["base_url"] = base_url
     if cid and csec:                                   # v15-native OAuth client credentials
         return PhenomlClient(client_id=cid, client_secret=csec, **kw)
-    if user and pw:                                    # legacy: mint a token, pass it as a callable
-        token = mint_legacy_token(base_url, user, pw)
-        return PhenomlClient(token=lambda: token, **kw)
-    raise SystemExit("Set PHENOML_CLIENT_ID/_SECRET or PHENOML_USERNAME/_PASSWORD in .env")
+    raise SystemExit("Set PHENOML_CLIENT_ID and PHENOML_CLIENT_SECRET in .env")
 
 client = make_client()
 FHIR_PROVIDER_ID = os.environ.get("PHENOML_FHIR_PROVIDER_ID", "")
@@ -105,8 +87,14 @@ def parse_json(text: str):
     try:
         return json.loads(text)
     except Exception:
-        m = re.search(r"\{.*\}|\[.*\]", text or "", re.DOTALL)
-        return json.loads(m.group(0)) if m else {}
+        pass
+    m = re.search(r"\{.*\}|\[.*\]", text or "", re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return {}
 ```
 
 ---
@@ -376,7 +364,7 @@ for prompt_id in [rp.data.id, bcbs_prompt.data.id]:
 2. **Clinical data goes in `message`, not `context`** — `agent.chat.send(context=...)` does not reach the model; agents will say "please provide the patient information." *(Steps 1.3, 2.1, 3.2)*
 3. **Raise the client `timeout`** (≥300s) — multi-resource extraction and workflow-graph generation exceed the default and raise `ReadTimeout`/`RemoteProtocolError`. `max_retries` helps with transient server disconnects.
 4. **IPS = current meds only** — failed/discontinued trials (`completed`/`stopped`) won't appear; carry the `MedicationRequest` history separately for prior-auth. *(Step 1.1 → 2.1)*
-5. **Auth:** v15 is `PhenomlClient(client_id=, client_secret=)`; legacy accounts mint a token via Basic-auth `POST /auth/token` and pass it as `token=lambda: tok`. *(see `make_client`)*
+5. **Auth:** v15 is `PhenomlClient(client_id=, client_secret=)` (OAuth client credentials). *(see `make_client`)*
 
 **Shared vs dedicated instances:** shared instances allow FHIR `GET` + `POST`; `PUT`/`PATCH`/`DELETE`/Bundle need a dedicated instance. The demo uses per-resource `POST` so it runs anywhere.
 
