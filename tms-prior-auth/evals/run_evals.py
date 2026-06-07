@@ -233,7 +233,7 @@ def print_scorecard(results, cpt, ext, k):
         return
     banner("SCORECARD  accuracy (vs gold)  +  determinism (stability across repeats)")
     w = max([len(r["id"]) for r in results] + [len("CASE")])
-    header = f"{'CASE':<{w}}  {'EXPECT':<7}  {'DECISION (k runs)':<19}  {'CODES':<13}  {'CITED':<5}  STABLE"
+    header = f"{'CASE':<{w}}  {'EXPECT':<8}  {'DECISION (k runs)':<19}  {'CODES':<13}  {'CITED':<5}  STABLE"
     print(header)
     print("-" * len(header))
     for r in results:
@@ -241,7 +241,7 @@ def print_scorecard(results, cpt, ext, k):
         codes = (",".join(r["rep_codes"]) or "—") + " " + _m(r["codes_correct"])
         stable = _m(r["decision_stable"] and r["codes_stable"])
         flag = "" if r["decision_correct"] else "   ✗ WRONG vs gold"
-        print(f"{r['id']:<{w}}  {r['expected_decision']:<7}  {dec:<19}  {codes:<13}  "
+        print(f"{r['id']:<{w}}  {r['expected_decision']:<8}  {dec:<19}  {codes:<13}  "
               f"{str(r['cited'])+'/'+str(r['cite_total']):<5}  {stable}{flag}")
     print("-" * len(header))
     n = len(results)
