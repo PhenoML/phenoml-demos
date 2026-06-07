@@ -294,7 +294,9 @@ def main():
     args = ap.parse_args()
 
     cases = load_cases(args.case)
-    k = args.repeats if args.repeats else int(os.environ.get("EVAL_REPEATS", "5"))
+    k = args.repeats if args.repeats is not None else int(os.environ.get("EVAL_REPEATS", "5"))
+    if k < 1:
+        sys.exit(f"--repeats must be a positive integer (got {k})")
 
     if args.validate:
         banner(f"VALIDATE  {len(cases)} case(s) — no API calls")
