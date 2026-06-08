@@ -1,6 +1,6 @@
 # TMS prior-auth — determinism & evals report
 
-_Generated 2026-06-07T22:29:03+00:00 · 3 repeats per case · adjudicate-only_
+_Generated 2026-06-07T23:11:10+00:00 · 3 repeats per case · adjudicate-only_
 
 | Case | Expected | Decision (k runs) | Codes | Cited | Stable | Correct |
 |------|----------|-------------------|-------|-------|--------|---------|

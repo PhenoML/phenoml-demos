@@ -6,21 +6,29 @@ An end-to-end **payer prior-authorization pipeline** built on the [PhenoML Pytho
 
 > ✅ **Every snippet below was executed end-to-end against a live PhenoML instance (SDK `15.0.3`).** The notes call out the things that bit us so they don't bite you.
 
-```
-  Referral note / PDF
-         │  lang2fhir.document_multi / create_multi
-         ▼
-  FHIR transaction Bundle ──► summary.create(mode="ips") ──► IPS narrative
-         │                                                       │
-         │                       referral agent reviews the IPS, asks follow-ups
-         │                                                       │ answers
-         ▼                                                       ▼
-  fhir.create  ◄── write Patient + follow-up resources to the EHR ◄┘
-         │
-         ▼
-  BCBS-MA policy agent  (system prompt = policy #297)
-         ├─ Step 2 · evaluate prior auth        (or a PhenoML workflow)
-         └─ Step 3 · adjudicate submission ──► APPROVED / DENIED + rationale
+```mermaid
+flowchart TD
+    A["Referral note / PDF"]
+
+    subgraph S1["Step 1 · Intake & evidence"]
+        A --> B["FHIR transaction Bundle"]
+        B --> C["IPS narrative"]
+        C --> D["Referral agent reviews IPS,<br/>asks follow-ups"]
+        D --> E["Write Patient + follow-up<br/>answers to the EHR"]
+    end
+
+    subgraph S2["Step 2 · Evaluate prior auth"]
+        E --> F["BCBS-MA policy agent<br/>system prompt = Policy #297"]
+        F --> G["Evaluate case against<br/>policy criteria"]
+    end
+
+    subgraph S3["Step 3 · Adjudicate & submit"]
+        G --> H["Assemble submission<br/>+ CPT codes"]
+        H --> I{"Meets Policy #297?"}
+    end
+
+    I -->|yes| J(["APPROVED<br/>covered codes + limits"])
+    I -->|no| K(["DENIED<br/>rationale + citations"])
 ```
 
 > ⚠️ **For demonstration / education only.** Not medical, billing, or legal advice. The policy text is extracted from a public BCBS-MA PDF; always use the current official policy for real decisions.
