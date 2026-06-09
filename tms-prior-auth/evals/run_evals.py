@@ -22,11 +22,10 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Reuse the demo's helpers. run_demo.py only defines functions at import time (main() is behind an
-# `if __name__ == "__main__"` guard), so importing it is side-effect free.
+# Reuse the demo's shared helpers (common.py defines only functions, so importing it is side-effect free).
 DEMO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(DEMO_ROOT))
-from run_demo import load_env, make_client, as_dict, parse_json, retry, banner, resolve_provider  # noqa: E402
+from common import load_env, make_client, as_dict, parse_json, retry, banner, resolve_provider  # noqa: E402
 from phenoml.construe import ExtractRequestSystem  # noqa: E402
 
 EVALS_DIR = Path(__file__).resolve().parent
@@ -34,12 +33,12 @@ CASES_DIR = EVALS_DIR / "cases"
 REPORT_MD = EVALS_DIR / "report.md"
 REPORT_JSON = EVALS_DIR / "report.json"
 
-# The service text + system used by the demo's construe step (run_demo.py:248-252).
+# The service text + system used by the demo's construe step (step3_adjudicate.py, Step 3.1).
 CPT_TEXT = ("Therapeutic repetitive transcranial magnetic stimulation (TMS) treatment; initial, "
             "including cortical mapping, motor threshold determination, delivery and management; "
             "plus subsequent delivery and management sessions.")
 
-# The adjudication ask/schema — identical to the demo (run_demo.py:269-272) so the eval grades
+# The adjudication ask/schema — identical to the demo (step3_adjudicate.py, Step 3.2) so the eval grades
 # exactly what the demo shows.
 ADJUDICATE_SCHEMA = ('{"decision":"APPROVED"|"DENIED","covered_codes":[...],"rationale":"...",'
                      '"policy_citations":[...],"conditions_or_limits":"..."}')
@@ -128,7 +127,7 @@ def load_cases(case_filter=None) -> list:
 
 
 def create_bcbs_agent(client, provider):
-    """Recreate the demo's BCBS-MA policy #297 agent (run_demo.py:188-201). Returns (agent_id, prompt_id).
+    """Recreate the demo's BCBS-MA policy #297 agent (step2_evaluate.py / step3_adjudicate.py). Returns (agent_id, prompt_id).
     agent.create is retried — this instance throws intermittent 500s (see the demo log)."""
     policy_text = (DEMO_ROOT / "policy_297_tms.md").read_text()
     prompt = client.agent.prompts.create(

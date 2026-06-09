@@ -1,10 +1,10 @@
-# TMS Prior-Auth Pipeline — a runnable PhenoML demo
+# TMS Prior-Auth Pipeline — a PhenoML course demo
 
-An end-to-end **payer prior-authorization pipeline** built on the [PhenoML Python SDK](https://github.com/PhenoML/phenoml-python-sdk) (**v15**).
+An end-to-end **payer prior-authorization pipeline** built on the [PhenoML Python SDK](https://github.com/PhenoML/phenoml-python-sdk) (**v15**), packaged as a two-part course.
 
 **Scenario:** a patient with treatment-resistant depression is referred for **repetitive transcranial magnetic stimulation (rTMS)**. We ingest the referral, build an International Patient Summary, have a **referral agent** review it and ask follow-ups, write the answers back to the EHR, then run the case past a **BCBS-Massachusetts policy agent** (its system prompt *is* [Medical Policy #297](./policy_297_tms.md)) to evaluate the prior auth and adjudicate the claim.
 
-> ✅ **Every snippet below was executed end-to-end against a live PhenoML instance (SDK `15.0.3`).** The notes call out the things that bit us so they don't bite you.
+> ✅ **Every snippet in this course was executed end-to-end against a live PhenoML instance (SDK `15.0.3`).**
 
 ```mermaid
 flowchart TD
@@ -35,11 +35,28 @@ flowchart TD
 
 ---
 
+## This course
+
+The walkthrough is split into two modules. Each keeps all the runnable code and layers **"predict-first" exercises** on top — every answer is hidden behind a `▸ Reveal` toggle, so commit to a prediction before you open it.
+
+1. **[Part 1 — Building the Agents](./part-1-building-agents.md)**
+   Build the **referral intake agent** and the **BCBS-MA policy #297 agent**, evaluate a prior auth, watch a decision **flip** when the evidence changes, and adjudicate APPROVED/DENIED. Capstone: port the pipeline to a different policy.
+
+2. **[Part 2 — Determinism & Evals](./part-2-determinism-evals.md)**
+   Measure whether the judgment layer is **correct** (vs. labeled gold) and **consistent** (stable across repeats), read the scoring code, and grow the eval case set. Capstone: introduce a regression and prove the eval catches it. *(Runs standalone — the harness builds its own throwaway agent.)*
+
+> The full end-to-end pipeline — including **document→FHIR extraction**, **IPS generation**, and **writing answers back to the EHR** — runs as three follow-along step scripts (`step1_intake.py` → `step2_evaluate.py` → `step3_adjudicate.py`) or all at once via [`run_demo.py`](./run_demo.py). See **[Run the demo](#run-the-demo)** below. Part 1 starts from a ready-made patient summary so it can focus on the agents; those data-plumbing steps live in `step1_intake.py`.
+
+---
+
 ## Prerequisites
 
+You'll need **Python 3.11+** and a set of PhenoML API credentials.
+
 ```bash
-pip install phenoml python-dotenv          # SDK v15+
-cp .env.example .env                        # then fill in your credentials
+python3 -m venv .venv && source .venv/bin/activate    # one venv for the whole demo
+pip install -r requirements.txt                       # phenoml (SDK v15+), python-dotenv, httpx
+cp .env.example .env                                  # then fill in your credentials
 ```
 
 `.env` — the SDK uses **OAuth client credentials** (v15-native):
@@ -49,416 +66,60 @@ PHENOML_CLIENT_ID=...
 PHENOML_CLIENT_SECRET=...
 
 PHENOML_BASE_URL=https://your-instance.app.pheno.ml   # blank = SDK default
-PHENOML_FHIR_PROVIDER_ID=<a FHIR provider UUID>        # client.fhir_provider.list() to find one
+PHENOML_FHIR_PROVIDER_ID=<a FHIR provider UUID>        # blank = borrow the first provider
 ```
 
-The snippets run **top to bottom in one Python session**. (A consolidated runner is in [`run_demo.py`](./run_demo.py): `python run_demo.py`.)
+> **No FHIR provider id?** Leave `PHENOML_FHIR_PROVIDER_ID` blank — the scripts borrow the first provider from `client.fhir_provider.list()` and print which one they used. Set it explicitly to pin a specific provider.
+
+The course modules (Part 1 / Part 2) run **top to bottom in one Python session**; the scripts below run under the same `.venv`.
 
 ---
 
-## Setup
+## Run the demo
 
-```python
-import base64, json, os, re
-from pathlib import Path
-from dotenv import load_dotenv
-from phenoml import PhenomlClient            # async apps: from phenoml import AsyncPhenomlClient
+Two ways to run the pipeline, both under the `.venv` you just set up.
 
-load_dotenv()
-
-def make_client() -> PhenomlClient:
-    base_url = os.environ.get("PHENOML_BASE_URL") or None
-    cid, csec = os.environ.get("PHENOML_CLIENT_ID"), os.environ.get("PHENOML_CLIENT_SECRET")
-    # timeout matters: multi-resource extraction + agent reasoning routinely exceed the ~60s default.
-    kw = {"timeout": 300.0, "max_retries": 2}   # single retry layer (the SDK's); bounded so a flaky call won't spam document/multi
-    if base_url:
-        kw["base_url"] = base_url
-    if cid and csec:                                   # v15-native OAuth client credentials
-        return PhenomlClient(client_id=cid, client_secret=csec, **kw)
-    raise SystemExit("Set PHENOML_CLIENT_ID and PHENOML_CLIENT_SECRET in .env")
-
-client = make_client()
-FHIR_PROVIDER_ID = os.environ.get("PHENOML_FHIR_PROVIDER_ID", "")
-
-def as_dict(obj):
-    # by_alias=True is REQUIRED. SDK response models use snake_case attrs (resource_type, full_url),
-    # but FHIR/the API expect camelCase (resourceType, fullUrl). Without it, summary.create (IPS)
-    # rejects the bundle with HTTP 500 "resourceType field is missing or not a string".
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump(by_alias=True, exclude_none=True)
-    if isinstance(obj, list):
-        return [as_dict(x) for x in obj]
-    return obj
-
-def parse_json(text: str) -> dict:
-    """Best-effort: pull the first JSON object out of an LLM reply. ALWAYS returns a dict
-    (empty if none can be recovered) so every caller can safely .get() the result — a stray
-    top-level array or scalar must never reach the .get()s in score_case/cite_hits."""
-    try:
-        v = json.loads(text)
-        if isinstance(v, dict):
-            return v
-    except Exception:
-        pass
-    m = re.search(r"\{.*\}", text or "", re.DOTALL)
-    if m:
-        try:
-            v = json.loads(m.group(0))
-            if isinstance(v, dict):
-                return v
-        except Exception:
-            pass
-    return {}
-```
-
----
-
-## Step 1 — Build the pipeline
-
-### 1.1 · Document → FHIR (`document/multi`)
-
-`lang2fhir.document_multi` extracts text from a **PDF or image** and returns a FHIR **transaction Bundle** with linked resources. If you don't have a PDF, `create_multi` does the same from raw text (identical response shape) — that's the path used below.
-
-```python
-SAMPLE_NOTE = Path("sample_referral_note.txt").read_text()
-PDF_PATH = "referral.pdf"   # optional: a real PDF/image
-
-if Path(PDF_PATH).exists():
-    content_b64 = base64.b64encode(Path(PDF_PATH).read_bytes()).decode()
-    doc = client.lang2fhir.document_multi(version="R4", content=content_b64,
-                                          detection_effort="standard", validation_method="none")
-    bundle, extracted = as_dict(doc.bundle), as_dict(doc.resources)
-else:
-    multi = client.lang2fhir.create_multi(text=SAMPLE_NOTE, version="R4")
-    bundle, extracted = as_dict(multi.bundle), as_dict(multi.resources)
-
-print(f"extracted {len(bundle.get('entry', []))} resources:")
-for r in extracted or []:
-    print(f"  - {r.get('resourceType')}: {r.get('description')}")
-
-# The failed/discontinued medication trials are 'stopped'/'completed' (see note in 1.2), so they do
-# NOT appear in the IPS current-medication section — but they are the key evidence for policy
-# criterion #2. Pull the trial history out here so the prior-auth/adjudication agent can see it.
-med_history_text = "\n".join(
-    f"- {r.get('description')}" for r in (extracted or []) if r.get("resourceType") == "MedicationRequest"
-) or "(no medication trials documented)"
-```
-
-> **Verified output:** 11 resources — Patient, Practitioner, Coverage, ServiceRequest, Encounter, Condition (severe recurrent MDD, F33.2), two Observations (PHQ-9 = 22, MADRS = 31), and three MedicationRequests (sertraline, venlafaxine, bupropion).
-
-### 1.2 · Generate the IPS (`summary.create`, `mode="ips"`)
-
-IPS mode produces an [International Patient Summary](https://hl7.org/fhir/uv/ips/) per ISO 27269. It requires a Bundle with **exactly one Patient** that has an identifier — `create_multi`/`document_multi` add a synthetic identifier when the source has none, so the Bundle is IPS-ready.
-
-```python
-patients = [e["resource"] for e in bundle.get("entry", [])
-            if e.get("resource", {}).get("resourceType") == "Patient"]
-assert len(patients) == 1, f"IPS needs exactly one Patient; found {len(patients)}"
-
-ips = client.summary.create(fhir_resources=bundle, mode="ips")
-ips_text = ips.summary
-print(ips_text)
-```
-
-> **Note (why no meds in the IPS):** the IPS *Medication Summary* lists **current/active** meds. The three antidepressants here are coded `completed`/`stopped` (they're *failed/discontinued past trials*), so the IPS shows "No known medications" — which is correct. The trial history (the prior-auth evidence) lives in the `MedicationRequest` resources, which is why 1.1 captures `med_history_text` separately.
-
-### 1.3 · The referral agent reviews the IPS
-
-```python
-REFERRAL_AGENT_PROMPT = """You are a referral intake specialist preparing a prior-authorization
-packet for rTMS for depression under BCBS-MA Medical Policy #297. Given the patient summary, decide
-whether the record documents EACH item and list what is MISSING or AMBIGUOUS:
-1. Confirmed SEVERE major depressive disorder documented by a standardized rating scale (PHQ-9, MADRS).
-2. At least ONE of: (a) failure of 2 medication trials, (b) intolerance across 2 trials,
-   (c) prior rTMS response >= 3 months ago, or (d) ECT candidacy where ECT is not superior.
-3. Failure of an adequate psychotherapy trial, documented by a standardized rating scale.
-4. Contraindication screen: seizure history, acute/chronic psychosis, relevant neurologic
-   conditions, or an implanted magnetic-sensitive device within 30 cm of the coil.
-
-Return ONLY JSON: {"present": [...], "missing": [...], "follow_up_questions": [...]}"""
-
-rp = client.agent.prompts.create(name="tms-referral-intake", content=REFERRAL_AGENT_PROMPT,
-                                 description="Reviews a patient summary for TMS prior-auth completeness.")
-referral_agent = client.agent.create(name="TMS Referral Intake Agent", prompts=[rp.data.id],
-                                     provider=FHIR_PROVIDER_ID, tags=["tms", "prior-auth"])
-
-# IMPORTANT: put the clinical data in `message`, NOT in `context`. The agent does not surface the
-# `context=` field to the model — passing the IPS there makes the agent reply "please provide the
-# patient information". The referral agent reviews the IPS (the clean summary).
-review = client.agent.chat.send(
-    agent_id=referral_agent.data.id,
-    message="Review the following International Patient Summary against the policy #297 rTMS "
-            "criteria and return the JSON.\n\n" + ips_text,
-)
-print(review.response)
-follow_up_questions = parse_json(review.response).get("follow_up_questions", [])
-```
-
-> **Verified output:** `present`: severe MDD + standardized rating scale; `missing`/`follow_up_questions`: medication-trial history (not in the IPS), psychotherapy trial, and the contraindication screen.
-
-### 1.4 · Write the follow-up answers back to the EHR as FHIR
-
-Persist the **Patient** first so the new resources can attach to it, then convert each free-text answer to a FHIR resource (`lang2fhir.create`) and **POST it** (`fhir.create`).
-
-```python
-created_patient = as_dict(client.fhir.create(
-    fhir_provider_id=FHIR_PROVIDER_ID, fhir_path="Patient", request=patients[0]))
-patient_id = created_patient.get("id")
-print("Patient on EHR:", patient_id)
-
-# In production these are the provider's responses to follow_up_questions:
-follow_up_answers = [
-    "Completed 16 sessions of cognitive behavioral therapy over 12 weeks with no significant "
-    "improvement; PHQ-9 remained 20 or higher throughout.",
-    "No personal or family history of seizures and no implanted magnetic-sensitive devices; "
-    "no psychotic features in the current episode.",
-]
-
-for answer in follow_up_answers:
-    resource = as_dict(client.lang2fhir.create(version="R4", resource="auto", text=answer))
-    resource.setdefault("subject", {"reference": f"Patient/{patient_id}"})   # link to the patient
-    saved = as_dict(client.fhir.create(
-        fhir_provider_id=FHIR_PROVIDER_ID, fhir_path=resource["resourceType"], request=resource))
-    print(f"  wrote {saved.get('resourceType')}/{saved.get('id')} to the EHR")
-```
-
-> **Verified output:** `Patient/<uuid>` created, then a Procedure (the CBT course) and a Condition written to the live Medplum sandbox. `resource="auto"` lets lang2fhir pick the type; pass a specific profile (e.g. `"simple-observation"`, `"questionnaireresponse"`) if you want to pin it.
->
-> **Dedicated-instance shortcut:** to write the whole extracted Bundle at once (transaction), use `client.fhir.execute_bundle(fhir_provider_id=FHIR_PROVIDER_ID, request=bundle)`. Bundle/PUT/PATCH/DELETE require a **dedicated** instance; shared instances allow only `GET` + per-resource `POST` (`fhir.create`), which is why we POST individually above.
-
-### 1.5 · The BCBS-MA policy agent (prompt = the policy text)
-
-```python
-POLICY_TEXT = Path("policy_297_tms.md").read_text()
-
-bcbs_prompt = client.agent.prompts.create(
-    name="bcbs-ma-policy-297",
-    content="You are a BCBS-MA utilization-management reviewer. Apply the following policy EXACTLY "
-            "as written, cite the criteria you rely on, and never invent criteria.\n\n" + POLICY_TEXT,
-    description="BCBS-MA Medical Policy #297 (TMS) as an agent.")
-bcbs_agent = client.agent.create(name="BCBS-MA Policy #297 Agent", prompts=[bcbs_prompt.data.id],
-                                 provider=FHIR_PROVIDER_ID, tags=["bcbs-ma", "policy-297"])
-print("BCBS agent:", bcbs_agent.data.id)
-```
-
----
-
-## Step 2 — Evaluate the prior authorization
-
-### 2.1 · Agent path
-
-Send the BCBS agent the IPS **plus** the medication-trial history (criterion #2 evidence) **plus** the follow-up answers — all in the `message`.
-
-```python
-pa_evidence = (
-    "=== INTERNATIONAL PATIENT SUMMARY ===\n" + ips_text
-    + "\n\n=== MEDICATION TRIAL HISTORY (from chart) ===\n" + med_history_text
-    + "\n\n=== ADDITIONAL FOLLOW-UP INFORMATION ON FILE ===\n"
-    + "\n".join(f"- {a}" for a in follow_up_answers)
-)
-PA_PROMPT = ('A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the patient '
-             'below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
-             '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n')
-pa = client.agent.chat.send(
-    agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence, enhanced_reasoning=True)
-print(json.dumps(parse_json(pa.response), indent=2))
-```
-
-> **Verified output:** `"meets_criteria": true` — satisfied: Criterion 1 (severe MDD + rating scale), Criterion 2a (sertraline + venlafaxine failures), Criterion 3 (CBT trial), and no contraindications.
-
-**Flip the decision — same patient, same agent, less evidence.** Drop the psychotherapy follow-up answer (the only evidence for criterion #3) and re-run the *same* eval:
-
-```python
-# follow_up_answers[0] is the CBT/psychotherapy answer; keep only the contraindication screen.
-pa_evidence_no_psych = (
-    "=== INTERNATIONAL PATIENT SUMMARY ===\n" + ips_text
-    + "\n\n=== MEDICATION TRIAL HISTORY (from chart) ===\n" + med_history_text
-    + "\n\n=== ADDITIONAL FOLLOW-UP INFORMATION ON FILE ===\n"
-    + "\n".join(f"- {a}" for a in follow_up_answers[1:])      # psychotherapy answer dropped
-)
-pa_flip = client.agent.chat.send(
-    agent_id=bcbs_agent.data.id, message=PA_PROMPT + pa_evidence_no_psych, enhanced_reasoning=True)
-print(json.dumps(parse_json(pa_flip.response), indent=2))
-```
-
-> **Expected output:** `"meets_criteria": false` — criteria 1 & 2 and the contraindication screen still pass, but criterion #3 (psychotherapy trial) moves to `unmet` and `additional_info_needed` asks for documentation of an adequate psychotherapy trial. Same patient, same agent — only the evidence changed. (It's an LLM with `enhanced_reasoning=True`, so the rationale wording varies run-to-run; the flip direction is stable.)
-
-### 2.2 · Workflow alternative (deterministic, repeatable)
-
-For a high-volume, deterministic path, model the same evidence-gathering as a PhenoML **workflow**.
-
-```python
-wf = client.workflows.create(
-    name="TMS PA - gather supporting evidence",
-    workflow_instructions=(
-        "Given a patient reference, gather the evidence needed to evaluate an rTMS prior "
-        "authorization under BCBS-MA policy #297: severe MDD Condition, depression rating-scale "
-        "Observations (PHQ-9/MADRS), antidepressant MedicationRequest history, and any psychotherapy "
-        "Observations. Flag which policy criteria are NOT supported by the records found."),
-    sample_data={"patient_id": "example-patient-id"},
-    fhir_provider_id=FHIR_PROVIDER_ID,
-)
-print("workflow:", wf.workflow_id)
-run = client.workflows.execute(wf.workflow_id, input_data={"patient_id": patient_id})
-print(as_dict(run))
-```
-
-> **Note:** workflow *creation* generates an execution graph with an LLM and can be **slow** (tens of seconds to a few minutes) — give it a generous `timeout`. **Agent vs. workflow:** use the agent for nuanced, conversational review; use the workflow when you want the same FHIR lookups + criteria checks to run identically every time (the nightly PA queue). A workflow can also be attached to an agent as a tool via `agent.create(..., workflows=[wf.workflow_id])`.
-
----
-
-## Step 3 — Submit to the payer and adjudicate
-
-### 3.1 · Assemble the submission (with billing codes)
-
-```python
-from phenoml.construe import ExtractRequestSystem
-
-cpt = client.construe.codes.extract(
-    text="Therapeutic repetitive transcranial magnetic stimulation (TMS) treatment; initial, "
-         "including cortical mapping, motor threshold determination, delivery and management; "
-         "plus subsequent delivery and management sessions.",
-    system=ExtractRequestSystem(name="CPT", version="2025"))
-cpt_codes = [as_dict(c) for c in (cpt.codes or [])]
-for c in cpt_codes:
-    print(c.get("code"), "-", c.get("description"))   # e.g. 90867 ...
-
-submission = {
-    "patient": f"Patient/{patient_id}",
-    "requested_service": "rTMS for treatment-resistant major depressive disorder",
-    "cpt_codes": [c.get("code") for c in cpt_codes][:3],
-    "clinical_summary": ips_text,
-    "medication_trial_history": med_history_text,
-    "supporting_evidence": follow_up_answers,
-}
-```
-
-### 3.2 · Adjudicate against the payer agent
-
-```python
-SCHEMA = ('Respond ONLY as JSON: {"decision":"APPROVED"|"DENIED","covered_codes":[...],'
-          '"rationale":"...","policy_citations":[...],"conditions_or_limits":"..."}')
-
-decision = client.agent.chat.send(
-    agent_id=bcbs_agent.data.id,
-    message="Adjudicate this prior-authorization submission under policy #297. " + SCHEMA
-            + "\n\nSUBMISSION:\n" + json.dumps(submission, indent=2),
-    enhanced_reasoning=True)
-print("APPROVE-PATH:\n", decision.response)
-```
-
-> **Verified output:** `"decision": "APPROVED"`, `covered_codes: ["90867"]`, full policy citations, and `conditions_or_limits` = the policy's ≤30-session + 3-week-taper limit.
-
-A case that fails the policy:
-
-```python
-denied_case = {
-    "patient": "Patient/example-2",
-    "requested_service": "rTMS for depression",
-    "clinical_summary": "Mild major depressive disorder. One antidepressant trial (sertraline) for "
-                        "4 weeks. No psychotherapy trial. No standardized rating scale on file.",
-}
-denied = client.agent.chat.send(
-    agent_id=bcbs_agent.data.id,
-    message="Adjudicate the following submission under policy #297. " + SCHEMA
-            + "\n\nSUBMISSION:\n" + json.dumps(denied_case, indent=2),
-    enhanced_reasoning=True)
-print("DENY-PATH:\n", denied.response)
-```
-
-> **Verified output:** denied — the agent correctly cites *mild* MDD with no rating scale, only one medication trial (criterion 2 needs two), and no psychotherapy trial. (Per policy #297, a request that doesn't meet criteria is **Investigational**, which the agent often uses as the decision term.)
-
----
-
-## Step 4 — Determinism & evals
-
-A payer won't run an automated prior-auth they can't trust, and "trust" is two concrete questions:
-
-1. **Is it consistent?** The same clinical facts must produce the same decision every time — it can't approve a case on Monday and deny it on Tuesday.
-2. **Is it correct?** The decisions have to match expert adjudication on a labeled set.
-
-The pipeline answers these *per layer*, because the layers have different determinism profiles:
-
-| Layer | SDK call | Determinism | How we show it |
-|-------|----------|-------------|----------------|
-| Structured extraction | `lang2fhir.create_multi`, `summary.create` | Schema-constrained, reproducible | (opt-in) re-extract, compare the resource shape |
-| Medical coding | `construe.codes.extract` | Schema-constrained | run K×, show CPT **90867** is stable |
-| **Judgment** | `agent.chat.send` (policy #297) | Stochastic | run K×, **measure** decision/code agreement |
-
-> **Honesty note that lands well with technical buyers:** the SDK exposes **no temperature/seed/model knob**, so we don't *claim* forced determinism on the LLM step. We **isolate** the deterministic substrate (coding + extraction, which are schema-constrained) from the judgment layer, and **measure** the judgment layer's stability empirically. That's the defensible story for any LLM-in-the-loop adjudication.
-
-### Run it
-
-`evals/run_evals.py` pins each case's clinical inputs (frozen submissions under `evals/cases/`) and exercises **just the adjudication step** K times each, then scores accuracy vs. gold and stability across repeats.
+**Follow along, one phase at a time.** Each script prints its results and hands the chart to the next via a gitignored `.state/` file:
 
 ```bash
-.venv/bin/python evals/run_evals.py --validate            # load + check cases, NO API calls
-.venv/bin/python evals/run_evals.py                       # K = EVAL_REPEATS (default 5)
-EVAL_REPEATS=3 .venv/bin/python evals/run_evals.py        # quicker pass
-.venv/bin/python evals/run_evals.py --case deny-mild-mdd  # one case, fast iteration
-EVAL_CHECK_EXTRACTION=1 .venv/bin/python evals/run_evals.py  # also re-extract FHIR K× (slow)
+.venv/bin/python step1_intake.py      # referral note → FHIR bundle → IPS → referral agent → write to EHR
+.venv/bin/python step2_evaluate.py    # BCBS-MA policy #297 agent evaluates the case — watch it flip when evidence drops
+.venv/bin/python step3_adjudicate.py  # extract CPT codes, adjudicate an APPROVED case then a DENIED one
 ```
 
-> Run under the demo's **`.venv`** (SDK v15). It creates its own throwaway policy #297 agent and deletes it on exit; adjudicate-only means **no EHR writes**, so it runs on a shared instance.
+Run them in order the first time (step 2 reads what step 1 wrote). Re-run any step on its own to iterate — each script creates the agents it needs and **deletes them on exit**, so nothing is left behind. Delete `.state/` to start over from a clean extraction.
 
-### What it prints
+**Or run the whole pipeline at once:**
 
-Actual output from a 3-repeat run against the live instance:
-
-```
-CASE                        EXPECT    DECISION (k runs)    CODES          CITED  STABLE
----------------------------------------------------------------------------------------
-approve-maria-garcia        APPROVED  APPROVED 3/3         90867 ✓        3/3    ✓
-deny-contraindication       DENIED    DENIED 3/3           — ✓            3/3    ✓
-deny-mild-mdd               DENIED    DENIED 3/3           — ✓            2/2    ✓
-deny-missing-psychotherapy  DENIED    DENIED 3/3           — ✓            1/1    ✓
----------------------------------------------------------------------------------------
-Decision accuracy:   4/4  (100%)
-Decision stability:  12/12 runs agree  (100%)
-Structured layer (construe CPT):    90867 — stable 3/3  (✓)
+```bash
+.venv/bin/python run_demo.py
 ```
 
-It also writes `evals/report.md` (shareable) and `evals/report.json`. *(Stability is measured per run — a flipped repeat shows up as `2/3 ⚠` and a `✗` in STABLE, which is exactly the signal you want.)*
+**Measure it (Part 2)** — accuracy vs. labeled gold + decision stability across repeats:
 
-### The case set
+```bash
+.venv/bin/python evals/run_evals.py --validate     # check the cases, no API calls
+.venv/bin/python evals/run_evals.py                # score against the live policy agent
+```
 
-Four labeled cases, one JSON each in `evals/cases/`, every input frozen from the live demo run:
-
-| Case | Exercises | Gold |
-|------|-----------|------|
-| `approve-maria-garcia` | criteria 1 + 2a + 3 met, screen clear | **APPROVED**, `90867` |
-| `deny-mild-mdd` | mild MDD, 1 trial, no scale, no therapy | **DENIED** |
-| `deny-missing-psychotherapy` | 1 & 2 met, criterion 3 absent (the "drop the psychotherapy answer" flip) | **DENIED** |
-| `deny-contraindication` | 1/2/3 met but seizure hx + implanted device | **DENIED** |
-
-Each case carries `expected.decision`, `expected.covered_codes`, and a soft `must_cite_any` (citation keywords we expect in the rationale). **Add a case** by dropping another JSON in `evals/cases/` — no code changes.
+> **What success looks like:** step 2 reports `meets_criteria: true` on the full evidence and flips to `false` once the psychotherapy answer is dropped; step 3 prints `APPROVED` for the complete submission and `DENIED` for the mild-MDD case. Writing to the EHR in step 1 needs a **dedicated** instance — on a shared instance that one step logs `execute_bundle failed (instance may be read-only)` and the rest still run (see the instance note at the bottom).
 
 ---
 
-## Cleanup (optional)
+## What's in this repo
 
-```python
-for agent_id in [referral_agent.data.id, bcbs_agent.data.id]:
-    try: client.agent.delete(agent_id)
-    except Exception as e: print("skip agent delete:", e)
-for prompt_id in [rp.data.id, bcbs_prompt.data.id]:
-    try: client.agent.prompts.delete(prompt_id)
-    except Exception as e: print("skip prompt delete:", e)
-```
+| Path | What it is |
+|------|-----------|
+| [`part-1-building-agents.md`](./part-1-building-agents.md) | Course module 1 — build & run the agents |
+| [`part-2-determinism-evals.md`](./part-2-determinism-evals.md) | Course module 2 — measure accuracy & stability |
+| [`step1_intake.py`](./step1_intake.py) | Phase 1 — referral note → FHIR bundle → IPS → referral agent → write to EHR |
+| [`step2_evaluate.py`](./step2_evaluate.py) | Phase 2 — BCBS-MA policy #297 agent evaluates the prior auth (+ the evidence flip) |
+| [`step3_adjudicate.py`](./step3_adjudicate.py) | Phase 3 — extract CPT codes and adjudicate APPROVED / DENIED |
+| [`run_demo.py`](./run_demo.py) | Runs all three phases in one process |
+| [`common.py`](./common.py) | Shared config/auth/helpers + the `.state/` artifact store the steps pass data through |
+| [`evals/run_evals.py`](./evals/run_evals.py) | The determinism + accuracy scorecard |
+| [`evals/cases/`](./evals/cases) | Labeled prior-auth cases (one JSON each) |
+| [`policy_297_tms.md`](./policy_297_tms.md) | BCBS-MA Medical Policy #297 — loaded verbatim as the payer agent's prompt |
+| `sample_referral_note.txt` | Sample clinical referral used by `step1_intake.py` |
 
----
-
-## Appendix — things testing taught us
-
-**SDK surface used (v15.x):** `lang2fhir.document_multi` / `create_multi` / `create` · `summary.create(mode="ips")` · `agent.prompts.create` · `agent.create` · `agent.chat.send` · `fhir.create` / `execute_bundle` · `workflows.create` / `execute` · `construe.codes.extract`.
-
-**Gotchas baked into the snippets above:**
-1. **`by_alias=True`** when dumping any SDK model to a dict — otherwise FHIR fields come out snake_case (`resource_type`) and IPS generation 500s. *(see `as_dict`)*
-2. **Clinical data goes in `message`, not `context`** — `agent.chat.send(context=...)` does not reach the model; agents will say "please provide the patient information." *(Steps 1.3, 2.1, 3.2)*
-3. **Raise the client `timeout`** (≥300s) — multi-resource extraction and workflow-graph generation exceed the default and raise `ReadTimeout`/`RemoteProtocolError`. `max_retries` helps with transient server disconnects.
-4. **IPS = current meds only** — failed/discontinued trials (`completed`/`stopped`) won't appear; carry the `MedicationRequest` history separately for prior-auth. *(Step 1.1 → 2.1)*
-5. **Auth:** v15 is `PhenomlClient(client_id=, client_secret=)` (OAuth client credentials). *(see `make_client`)*
-
-**Shared vs dedicated instances:** shared instances allow FHIR `GET` + `POST`; `PUT`/`PATCH`/`DELETE`/Bundle need a dedicated instance. The demo uses per-resource `POST` so it runs anywhere.
-
-**Policy text:** the BCBS-MA #297 criteria live in [`policy_297_tms.md`](./policy_297_tms.md) and are loaded verbatim as the payer agent's system prompt.
+**Shared vs dedicated instances:** shared instances allow FHIR `GET` + per-resource `POST`; `PUT`/`PATCH`/`DELETE`/Bundle need a dedicated instance. The course paths run anywhere.

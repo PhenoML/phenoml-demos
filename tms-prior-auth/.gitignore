@@ -1,6 +1,6 @@
 .venv/
 .env
-.cache_bundle.json
+.state/
 run_demo.log
 referral.pdf
 __pycache__/

@@ -1,0 +1,3 @@
+phenoml>=15        # PhenoML Python SDK, v15-native OAuth client credentials
+python-dotenv      # load PHENOML_* credentials from .env
+httpx              # used directly by the retry() transport-error wrapper in common.py
