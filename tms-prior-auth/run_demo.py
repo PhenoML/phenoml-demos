@@ -6,7 +6,7 @@ Auth: PHENOML_CLIENT_ID + PHENOML_CLIENT_SECRET (OAuth client credentials, v15-n
 
 Run:  .venv/bin/python run_demo.py
 """
-import json, os, re, sys, time
+import json, os, re, sys, time, uuid
 from pathlib import Path
 
 import httpx
@@ -185,17 +185,19 @@ def main():
         follow_up_questions = parse_json(review.response).get("follow_up_questions", [])
         print("\nfollow_up_questions parsed:", follow_up_questions)
 
-        # --- Step 1.4: write follow-up answers back to the EHR --------------
-        banner("STEP 1.4  Persist Patient + follow-up Observations to the EHR")
-        patient_id = None
-        try:
-            created_patient = as_dict(client.fhir.create(
-                fhir_provider_id=provider, fhir_path="Patient", request=patients[0]))
-            patient_id = created_patient.get("id")
-            print("Patient on EHR:", patient_id)
-        except Exception as e:
-            print("Patient POST failed (instance may be read-only):", type(e).__name__, str(e)[:200])
+        # --- Step 1.4: persist the full chart to the EHR in ONE transaction --
+        banner("STEP 1.4  Persist the full FHIR bundle + follow-up answers (fhir.execute_bundle)")
+        # The extracted bundle is already a FHIR `transaction` Bundle: every entry has a unique
+        # urn:uuid fullUrl and internal refs use those fullUrls, so a single execute_bundle persists
+        # Patient + Condition + Observations + MedicationRequests + ... interlinked — the server
+        # assigns real ids and rewrites the references. (create_multi only EXTRACTS the bundle;
+        # execute_bundle is what writes it.)
+        patient_full_url = next(e["fullUrl"] for e in bundle["entry"]
+                                if e["resource"]["resourceType"] == "Patient")
 
+        # Follow-up answers are new evidence gathered after the referral review. Extract each and fold
+        # it into the SAME transaction, linked to the patient's bundle-local fullUrl, so the whole
+        # chart lands in one atomic write.
         follow_up_answers = [
             "Completed 16 sessions of cognitive behavioral therapy over 12 weeks with no significant "
             "improvement; PHQ-9 remained 20 or higher throughout.",
@@ -203,15 +205,24 @@ def main():
             "no psychotic features in the current episode.",
         ]
         for answer in follow_up_answers:
-            try:
-                resource = as_dict(client.lang2fhir.create(version="R4", resource="auto", text=answer))
-                if patient_id:
-                    resource.setdefault("subject", {"reference": f"Patient/{patient_id}"})
-                saved = as_dict(client.fhir.create(
-                    fhir_provider_id=provider, fhir_path=resource["resourceType"], request=resource))
-                print(f"  wrote {saved.get('resourceType')}/{saved.get('id')}")
-            except Exception as e:
-                print("  write failed:", type(e).__name__, str(e)[:200])
+            resource = as_dict(client.lang2fhir.create(version="R4", resource="auto", text=answer))
+            # lang2fhir stamps a placeholder subject; repoint it at the patient's fullUrl (a plain
+            # setdefault would no-op — the placeholder key already exists, leaving it orphaned).
+            resource["subject"] = {"reference": patient_full_url}
+            bundle["entry"].append({"fullUrl": f"urn:uuid:{uuid.uuid4()}", "resource": resource,
+                                    "request": {"method": "POST", "url": resource["resourceType"]}})
+
+        patient_id = None
+        try:
+            resp = as_dict(client.fhir.execute_bundle(fhir_provider_id=provider, request=bundle))
+            for e in resp.get("entry", []) or []:
+                loc = (e.get("response") or {}).get("location") or ""
+                print(f"  created {loc}")
+                if "Patient/" in loc and patient_id is None:
+                    patient_id = loc.split("Patient/")[1].split("/")[0]
+            print(f"persisted {len(resp.get('entry', []) or [])} resources; Patient/{patient_id}")
+        except Exception as e:
+            print("execute_bundle failed (instance may be read-only):", type(e).__name__, str(e)[:300])
 
         # --- Step 1.5: BCBS-MA policy agent ---------------------------------
         banner("STEP 1.5  Create BCBS-MA policy #297 agent")
