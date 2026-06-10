@@ -69,7 +69,7 @@ def run(client, env, provider, state, created):
     banner("STEP 2.2  Workflow alternative (create + execute)")
     patient_id = state.get("patient_id")
     try:
-        if env.get("SKIP_WORKFLOW"):
+        if env.get("SKIP_WORKFLOW", "").strip().lower() in ("1", "true", "yes", "on"):
             raise RuntimeError("skipped via SKIP_WORKFLOW env")
         wf = client.workflows.create(
             name="TMS PA - gather supporting evidence",

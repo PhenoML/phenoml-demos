@@ -17,7 +17,7 @@ def run(client, env, provider, state, created):
     # --- Step 1.1: document/multi (text fallback; no PDF asset here) -----
     banner("STEP 1.1  Referral note -> FHIR bundle (lang2fhir.create_multi)")
     note = (HERE / "sample_referral_note.txt").read_text()
-    if state.get("bundle"):
+    if state.get("bundle") and state.get("resources") is not None:
         print("(reusing cached bundle from .state/ — delete .state/ to re-extract)")
         bundle, extracted = state["bundle"], state["resources"]
     else:

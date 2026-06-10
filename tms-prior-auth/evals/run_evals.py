@@ -17,7 +17,7 @@ Run from the tms-prior-auth dir, using its v15 venv (the global Python may have 
   .venv/bin/python evals/run_evals.py --case deny-mild-mdd --repeats 3
   EVAL_CHECK_EXTRACTION=1 .venv/bin/python evals/run_evals.py   # also re-extract FHIR K× (slow)
 """
-import argparse, json, os, sys, time
+import argparse, json, os, re, sys, time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,11 +67,18 @@ def normalize_decision(s: str) -> str:
 
 def cite_hits(must_cite_any, runs):
     """How many expected citation keywords appear anywhere in citations+rationale across the runs.
-    'criterion' is normalized to 'condition' so the two synonyms match interchangeably."""
+    'criterion' is normalized to 'condition' so the two synonyms match interchangeably. Numeric
+    labels match as whole tokens, so 'condition 1' is NOT counted as a hit inside 'condition 10'."""
     hay = " ".join(
         json.dumps(r.get("policy_citations", [])) + " " + str(r.get("rationale", "")) for r in runs
     ).lower().replace("criterion", "condition")
-    hits = [kw for kw in must_cite_any if kw.lower() in hay]
+    def cited(kw: str) -> bool:
+        kw = kw.lower()
+        # Block only a run-on digit (so 'condition 1' != 'condition 10'); a trailing word
+        # boundary would wrongly drop plurals the agent really cites ('contraindications').
+        tail = r"(?!\d)" if kw[-1:].isdigit() else ""
+        return re.search(re.escape(kw) + tail, hay) is not None
+    hits = [kw for kw in must_cite_any if cited(kw)]
     return len(hits), len(must_cite_any)
 
 

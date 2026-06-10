@@ -108,8 +108,8 @@ def resolve_provider(client, env) -> str:
     except Exception as e:
         provs = []
         print(f"[provider] lookup failed: {type(e).__name__}: {str(e)[:120]}")
-    if provs:
-        pid = provs[0].get("id")
+    pid = next((pr.get("id") for pr in provs if pr.get("id")), None)
+    if pid:
         print(f"[fhir provider] none set in .env — borrowing first configured provider {pid}")
         return pid
     sys.exit("agent.create requires a FHIR provider, but none is set and none could be "
