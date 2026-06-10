@@ -163,7 +163,7 @@ A case is a frozen submission + expected outcome. `load_cases` requires top-leve
 
 An eval you can't make *fail* on a real regression isn't protecting you. Introduce one and confirm the harness catches it:
 
-- Weaken the policy agent's system prompt — drop `"never invent criteria"`, or summarize away criterion #2's "two trials" detail (edit `create_bcbs_agent` in `run_evals.py`, or the prompt in [Part 1 §1.2](./part-1-building-agents.md#12--the-policy-adjudication-agent)).
+- Weaken the policy agent's system prompt — drop `"never invent criteria"`, or summarize away criterion #2's "two trials" detail (edit `create_bcbs_agent` in `run_evals.py`, or the prompt in [Part 1 §2.1](./part-1-building-agents.md#21--the-policy-adjudication-agent)).
 - Re-run `evals/run_evals.py` and watch for a case that moves to `✗ WRONG vs gold` or goes unstable.
 - **If nothing changes, your case set has a gap** — add the case that *would* have caught it.
 

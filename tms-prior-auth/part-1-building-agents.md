@@ -5,8 +5,8 @@
 
 In this module you build the two LLM agents at the heart of a payer prior-authorization pipeline for **rTMS** (repetitive transcranial magnetic stimulation) under [BCBS-MA Medical Policy #297](./policy_297_tms.md):
 
-1. a **referral intake agent** that reviews a patient summary for completeness and asks follow-up questions, and
-2. a **BCBS-MA policy #297 agent** whose system prompt *is* the payer's medical policy — it evaluates the request against the criteria and adjudicates APPROVED/DENIED.
+1. a **referral intake agent** (**Step 1**) that reviews a patient summary for completeness and asks follow-up questions, and
+2. a **BCBS-MA policy #297 agent** (**Steps 2–3**) whose system prompt *is* the payer's medical policy — it evaluates the request against the criteria and adjudicates APPROVED/DENIED.
 
 You'll run them against ready-made clinical inputs, evaluate a prior auth, watch a decision **flip** when the evidence changes, and adjudicate the claim.
 
@@ -127,7 +127,9 @@ follow_up_answers = [
 
 ---
 
-## Step 1 — Build the agents
+## Step 1 — Intake & evidence
+
+> In the follow-along scripts, this phase runs as [`step1_intake.py`](./step1_intake.py).
 
 ### 1.1 · The referral intake agent
 
@@ -185,7 +187,13 @@ follow_up_questions = parse_json(review.response).get("follow_up_questions", [])
 >
 > </details>
 
-### 1.2 · The policy adjudication agent
+---
+
+## Step 2 — Evaluate prior auth
+
+> In the follow-along scripts, this phase runs as [`step2_evaluate.py`](./step2_evaluate.py).
+
+### 2.1 · The policy adjudication agent
 
 The payer agent's system prompt is the **entire policy text**, loaded verbatim, with a one-line instruction to apply it exactly and cite what it relies on.
 
@@ -218,11 +226,7 @@ print("BCBS agent:", bcbs_agent.data.id)
 >
 > </details>
 
----
-
-## Step 2 — Evaluate the prior authorization
-
-### 2.1 · Agent path
+### 2.2 · Agent path
 
 > **🧠 Exercise — assemble the evidence (Predict).** Before reading the code: **which evidence sources must you concatenate into the agent's `message` to evaluate criterion #2 (medication trials)? Why isn't the IPS alone enough?**
 >
@@ -293,7 +297,7 @@ print(json.dumps(parse_json(pa_flip.response), indent=2))
 >
 > </details>
 
-### 2.2 · Workflow alternative (deterministic, repeatable)
+### 2.3 · Workflow alternative (deterministic, repeatable)
 
 For a high-volume, deterministic path, model the same evidence-gathering as a PhenoML **workflow** instead of a conversational agent.
 
@@ -327,7 +331,9 @@ print(as_dict(run))
 
 ---
 
-## Step 3 — Submit to the payer and adjudicate
+## Step 3 — Adjudicate & submit
+
+> In the follow-along scripts, this phase runs as [`step3_adjudicate.py`](./step3_adjudicate.py).
 
 ### 3.1 · Assemble the submission (with billing codes)
 
