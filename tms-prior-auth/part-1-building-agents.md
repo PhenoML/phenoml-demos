@@ -20,7 +20,6 @@ You'll run them against ready-made clinical inputs, evaluate a prior auth, watch
 
 By the end of Part 1 you can:
 - author a **system prompt** that turns an LLM into a role-bound reviewer that returns machine-usable JSON;
-- explain why clinical data must go in the agent's `message`, not `context`;
 - assemble multi-source evidence and demonstrate **evidence-sensitivity** (same patient + same agent, different evidence → different decision);
 - choose between a conversational **agent** and a deterministic **workflow**;
 - adjudicate a submission to a structured APPROVED/DENIED decision with billing codes and policy citations.
