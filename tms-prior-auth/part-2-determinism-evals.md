@@ -79,7 +79,7 @@ Open [`evals/run_evals.py`](./evals/run_evals.py) and read `score_case` (≈ lin
 >
 > <details><summary>▸ Reveal</summary>
 >
-> `most_common(1)` returns the highest-count element; on a **tie**, Python's `Counter` breaks it by **insertion order** — *first decision seen wins*. So `[APPROVED, DENIED, APPROVED, DENIED]` → modal `APPROVED`, but `[DENIED, APPROVED, DENIED, APPROVED]` → modal `DENIED`. The tiebreak is **order-dependent, i.e. effectively arbitrary** — a wart worth surfacing, not trusting. And `decision_stable = (agree == k)` → `2 == 4` is False, so STABLE shows `✗` and the row gets a `⚠`. The real lesson: a tie *is* the "route to a human" signal — don't let the modal silently pick a side. Even-numbered K invites ties, which is partly why the default is **K=5**.
+> `most_common(1)` returns the highest-count element; on a **tie**, Python's `Counter` breaks it by **insertion order** — *first decision seen wins*. So `[APPROVED, DENIED, APPROVED, DENIED]` → modal `APPROVED`, but `[DENIED, APPROVED, DENIED, APPROVED]` → modal `DENIED`. The tiebreak is **order-dependent, i.e. effectively arbitrary** — a flaw worth surfacing, not trusting. And `decision_stable = (agree == k)` → `2 == 4` is False, so STABLE shows `✗` and the row gets a `⚠`. The real lesson: a tie *is* the "route to a human" signal — don't let the modal silently pick a side. Even-numbered K invites ties, which is partly why the default is **K=5**.
 >
 > </details>
 
@@ -145,7 +145,7 @@ A case is a frozen submission + expected outcome. `load_cases` requires top-leve
 >
 > <details><summary>▸ Reveal — discussion</summary>
 >
-> There's no universal number — but the instability *is* the routing signal. A common pattern: auto-decide only when **all K agree** (and even then, sample-audit a slice); route any case with a single flipped repeat to a human. Larger K raises sensitivity (catches more wobble) at the cost of more API calls. The honest story for a payer: *"we don't force determinism; we measure it and escalate the unstable minority to a human."*
+> There's no universal number — but the instability *is* the routing signal. A common pattern: auto-decide only when **all K agree** (and even then, sample-audit a slice); route any case with a single flipped repeat to a human. Larger K raises sensitivity (catches more instability) at the cost of more API calls. The honest story for a payer: *"we don't force determinism; we measure it and escalate the unstable minority to a human."*
 >
 > </details>
 

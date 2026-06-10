@@ -45,7 +45,7 @@ The walkthrough is split into two modules. Each keeps all the runnable code and 
 2. **[Part 2 — Determinism & Evals](./part-2-determinism-evals.md)**
    Measure whether the judgment layer is **correct** (vs. labeled gold) and **consistent** (stable across repeats), read the scoring code, and grow the eval case set. Capstone: introduce a regression and prove the eval catches it. *(Runs standalone — the harness builds its own throwaway agent.)*
 
-> The full end-to-end pipeline — including **document→FHIR extraction**, **IPS generation**, and **writing answers back to the EHR** — runs as three follow-along step scripts (`step1_intake.py` → `step2_evaluate.py` → `step3_adjudicate.py`) or all at once via [`run_demo.py`](./run_demo.py). See **[Run the demo](#run-the-demo)** below. Part 1 starts from a ready-made patient summary so it can focus on the agents; those data-plumbing steps live in `step1_intake.py`.
+> The full end-to-end pipeline — including **document→FHIR extraction**, **IPS generation**, and **writing answers back to the EHR** — runs as three follow-along step scripts (`step1_intake.py` → `step2_evaluate.py` → `step3_adjudicate.py`) or all at once via [`run_demo.py`](./run_demo.py). See **[Run the demo](#run-the-demo)** below. Part 1 starts from a ready-made patient summary so it can focus on the agents; those data-integration steps live in `step1_intake.py`.
 
 ---
 
@@ -87,7 +87,7 @@ Two ways to run the pipeline, both under the `.venv` you just set up.
 .venv/bin/python step3_adjudicate.py  # extract CPT codes, adjudicate an APPROVED case then a DENIED one
 ```
 
-Run them in order the first time (step 2 reads what step 1 wrote). Re-run any step on its own to iterate — each script creates the agents it needs and **deletes them on exit**, so nothing is left behind. Delete `.state/` to start over from a clean extraction.
+Run them in order the first time (step 2 reads what step 1 wrote). Re-run any step on its own to iterate — each script creates the agents it needs and **deletes them on exit**, so nothing is left behind. To start over from a clean extraction, re-run with `--fresh` (alias `--reset`) — e.g. `.venv/bin/python step1_intake.py --fresh`. That works from any directory, unlike `rm -rf .state/`: the cache is anchored to the script, so it always lives in `tms-prior-auth/.state/` no matter where you run from.
 
 **Or run the whole pipeline at once:**
 

@@ -4,7 +4,7 @@
 Config/auth, small helpers, agent cleanup, and a tiny on-disk artifact store used to pass data
 between the step scripts (step1_intake -> step2_evaluate -> step3_adjudicate). The *interesting*
 code — prompts, agent.create, chat.send — lives inline in each step script so they read
-top-to-bottom; only the plumbing nobody learns from lives here.
+top-to-bottom; only the boilerplate nobody learns from lives here.
 
 Credentials come from tms-prior-auth/.env (preferred) or the repo-root ../.env.
 Auth: PHENOML_CLIENT_ID + PHENOML_CLIENT_SECRET (OAuth client credentials, v15-native).
@@ -145,6 +145,22 @@ def save_state(state: dict):
     STATE_DIR.mkdir(exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2))
     print(f"[state] saved {STATE_FILE.relative_to(HERE)} ({', '.join(state) or 'empty'})")
+
+
+def fresh_requested() -> bool:
+    """True if --fresh / --reset was passed on the command line."""
+    return any(a in ("--fresh", "--reset") for a in sys.argv[1:])
+
+
+def reset_state():
+    """Delete the on-disk artifact cache so the next run starts from a clean extraction.
+    Anchored to STATE_FILE (the script dir), so it works regardless of the caller's cwd —
+    which is the whole point: `rm -rf .state` only deletes it from inside tms-prior-auth/."""
+    if STATE_FILE.exists():
+        STATE_FILE.unlink()
+        print(f"[state] --fresh: deleted {STATE_FILE.relative_to(HERE)}")
+    else:
+        print(f"[state] --fresh: no cache at {STATE_FILE.relative_to(HERE)} (already clean)")
 
 
 def require(state: dict, *keys: str):

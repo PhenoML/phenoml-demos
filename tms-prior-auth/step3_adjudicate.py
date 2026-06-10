@@ -10,7 +10,8 @@ Run:  .venv/bin/python step3_adjudicate.py        (run step1_intake.py + step2_e
 import json
 
 from common import (HERE, load_env, make_client, resolve_provider, as_dict,
-                    banner, retry, cleanup, load_state, save_state, require)
+                    banner, retry, cleanup, load_state, save_state, require, reset_state,
+                    fresh_requested)
 
 
 def run(client, env, provider, state, created):
@@ -85,6 +86,8 @@ if __name__ == "__main__":
     env = load_env()
     client = make_client(env)
     provider = resolve_provider(client, env)
+    if fresh_requested():
+        reset_state()
     state, created = load_state(), {"agents": [], "prompts": []}
     try:
         run(client, env, provider, state, created)

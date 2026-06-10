@@ -10,7 +10,7 @@ Auth: PHENOML_CLIENT_ID + PHENOML_CLIENT_SECRET (OAuth client credentials, v15-n
 Run:  .venv/bin/python run_demo.py
 """
 import step1_intake, step2_evaluate, step3_adjudicate
-from common import load_env, make_client, resolve_provider, cleanup
+from common import load_env, make_client, resolve_provider, cleanup, reset_state, fresh_requested
 
 
 def main():
@@ -21,6 +21,8 @@ def main():
     # One process: state is passed step->step in memory (run fresh every time — the standalone step
     # scripts persist it to .state/ instead). `created` accumulates every agent/prompt across the
     # three phases for a single cleanup at the end, even if a phase raises.
+    if fresh_requested():
+        reset_state()
     state, created = {}, {"agents": [], "prompts": []}
     try:
         step1_intake.run(client, env, provider, state, created)

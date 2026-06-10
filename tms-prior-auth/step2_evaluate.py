@@ -10,7 +10,8 @@ Run:  .venv/bin/python step2_evaluate.py        (run step1_intake.py first)
 import json
 
 from common import (HERE, load_env, make_client, resolve_provider, as_dict, parse_json,
-                    banner, retry, cleanup, load_state, save_state, require)
+                    banner, retry, cleanup, load_state, save_state, require, reset_state,
+                    fresh_requested)
 
 
 def run(client, env, provider, state, created):
@@ -37,7 +38,7 @@ def run(client, env, provider, state, created):
     # --- Step 2.1: prior-auth evaluation --------------------------------
     banner("STEP 2.1  Prior-auth evaluation (full evidence, then psychotherapy dropped -> flip)")
     # The prior-auth agent needs the IPS *plus* the medication trial history (criterion #2 evidence)
-    # plus the follow-up answers — all in the MESSAGE.
+    # plus the follow-up answers.
     PA_PROMPT = ('A provider requests prior auth for rTMS (CPT 90867/90868/90869). Evaluate the '
                  'patient below against policy #297 and return ONLY JSON: {"meets_criteria":true|false,'
                  '"satisfied":[...],"unmet":[...],"additional_info_needed":[...],"rationale":"..."}\n\n')
@@ -68,22 +69,45 @@ def run(client, env, provider, state, created):
     # --- Step 2.2: workflow alternative (optional) ----------------------
     banner("STEP 2.2  Workflow alternative (create + execute)")
     patient_id = state.get("patient_id")
+    subject_ref = f"Patient/{patient_id}" if patient_id else "Patient/example-patient-id"
     try:
         if env.get("SKIP_WORKFLOW", "").strip().lower() in ("1", "true", "yes", "on"):
             raise RuntimeError("skipped via SKIP_WORKFLOW env")
+        # Deterministic alternative for the RETRIEVAL half of the pipeline: an LLM-planned,
+        # schema-constrained FHIR query graph that pulls the patient's chart back out of the EHR
+        # (the policy agent above still does the judgment — this only gathers facts). Two engine
+        # quirks are baked into how this is phrased; get either wrong and every search silently
+        # returns 0 results while the API still reports success=True:
+        #   1) Subject templating. The graph generator renders a patient variable as
+        #      `subject=Patient/{{var}}` whenever the variable is named like a patient
+        #      ("patient_id" / "*_ref") OR is referenced by name in the instructions — and an
+        #      *embedded* placeholder is NOT substituted at run time (the search executes as the
+        #      literal string "Patient/{{var}}" and matches nothing). So we hand the full reference
+        #      in under a bland, UN-referenced key ("note"): the generator then uses the literal
+        #      reference from the prose, or auto-binds "note" as a lone (substitutable) subject.
+        #   2) No code filters. Left alone it adds code= filters (SNOMED/RxNorm) that miss our
+        #      ICD-10 Condition and our med codes, so we tell it to filter by subject ONLY.
+        # This is intentionally brittle: graph generation is non-deterministic, so a regeneration
+        # can still wrap the placeholder or re-add filters. Production code would skip the workflow
+        # and use deterministic client.fhir.search(provider, "Condition?subject=Patient/<id>") calls.
         wf = client.workflows.create(
             name="TMS PA - gather supporting evidence",
             workflow_instructions=(
-                "Given a patient reference, gather the evidence needed to evaluate an rTMS prior "
-                "authorization under BCBS-MA policy #297: severe MDD Condition, depression rating-"
-                "scale Observations (PHQ-9/MADRS), antidepressant MedicationRequest history, and any "
-                "psychotherapy Observations. Flag which policy criteria are not supported."),
-            sample_data={"patient_id": patient_id or "example-patient-id"},
+                f"Gather the evidence to evaluate an rTMS prior authorization under BCBS-MA policy "
+                f"#297 for the patient whose FHIR reference is exactly {subject_ref}. Run these FHIR "
+                f"searches, EACH filtered ONLY by the subject parameter set to {subject_ref}. Do NOT "
+                f"add any code, category, status, or date filters — return ALL matching resources "
+                f"for the patient: (1) Condition resources (the MDD diagnosis); (2) Observation "
+                f"resources (PHQ-9 / MADRS rating scales and psychotherapy notes); "
+                f"(3) MedicationRequest resources (antidepressant trials)."),
+            # Neutral key, deliberately NOT named in the instructions above, so the generator keeps
+            # it a lone substitutable `subject` placeholder instead of wrapping it Patient/{{...}}.
+            sample_data={"note": "the patient FHIR reference is supplied at run time"},
             fhir_provider_id=provider,
         )
         print("workflow:", wf.workflow_id)
         if patient_id:
-            wf_run = client.workflows.execute(wf.workflow_id, input_data={"patient_id": patient_id})
+            wf_run = client.workflows.execute(wf.workflow_id, input_data={"note": subject_ref})
             print(as_dict(wf_run))
     except Exception as e:
         print("workflow step skipped/failed:", type(e).__name__, str(e)[:300])
@@ -93,6 +117,8 @@ if __name__ == "__main__":
     env = load_env()
     client = make_client(env)
     provider = resolve_provider(client, env)
+    if fresh_requested():
+        reset_state()
     state, created = load_state(), {"agents": [], "prompts": []}
     try:
         run(client, env, provider, state, created)

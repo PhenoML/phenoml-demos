@@ -3,7 +3,7 @@
 > **Course module 1 of 2.** Next: [Part 2 — Determinism & Evals](./part-2-determinism-evals.md).
 > Install + credentials are in the [course index](./README.md#prerequisites).
 
-In this module you build the two LLM agents at the heart of a payer prior-authorization pipeline for **rTMS** (repetitive transcranial magnetic stimulation) under [BCBS-MA Medical Policy #297](./policy_297_tms.md):
+In this module you build the two core LLM agents in a payer prior-authorization pipeline for **rTMS** (repetitive transcranial magnetic stimulation) under [BCBS-MA Medical Policy #297](./policy_297_tms.md):
 
 1. a **referral intake agent** (**Step 1**) that reviews a patient summary for completeness and asks follow-up questions, and
 2. a **BCBS-MA policy #297 agent** (**Steps 2–3**) whose system prompt *is* the payer's medical policy — it evaluates the request against the criteria and adjudicates APPROVED/DENIED.
@@ -12,7 +12,7 @@ You'll run them against ready-made clinical inputs, evaluate a prior auth, watch
 
 > ✅ **Every code snippet runs against a live PhenoML instance (SDK `15.0.3`).** Answers to each exercise are hidden behind a **`▸ Reveal`** toggle — commit to a prediction *before* you open it.
 >
-> The upstream data plumbing — document→FHIR extraction, IPS generation, and writing answers back to the EHR — is implemented end-to-end in [`run_demo.py`](./run_demo.py). This module starts from a ready-made patient summary (the fixtures below) so we can focus on the *agents*.
+> The upstream data integration — document→FHIR extraction, IPS generation, and writing answers back to the EHR — is implemented end-to-end in [`run_demo.py`](./run_demo.py). This module *highlights* the agent code and starts from a ready-made patient summary so we can focus on the *agents* — the runnable version is the step scripts (`step1_intake.py` → `step2_evaluate.py` → `step3_adjudicate.py`).
 
 > ⚠️ **For demonstration / education only.** Not medical, billing, or legal advice.
 
@@ -26,103 +26,7 @@ By the end of Part 1 you can:
 
 ---
 
-## Setup
-
-```python
-import json, os, re
-from pathlib import Path
-from dotenv import load_dotenv
-from phenoml import PhenomlClient            # async apps: from phenoml import AsyncPhenomlClient
-
-load_dotenv()
-
-def make_client() -> PhenomlClient:
-    base_url = os.environ.get("PHENOML_BASE_URL") or None
-    cid, csec = os.environ.get("PHENOML_CLIENT_ID"), os.environ.get("PHENOML_CLIENT_SECRET")
-    # timeout matters: multi-resource extraction + agent reasoning routinely exceed the ~60s default.
-    kw = {"timeout": 300.0, "max_retries": 2}
-    if base_url:
-        kw["base_url"] = base_url
-    if cid and csec:                                   # v15-native OAuth client credentials
-        return PhenomlClient(client_id=cid, client_secret=csec, **kw)
-    raise SystemExit("Set PHENOML_CLIENT_ID and PHENOML_CLIENT_SECRET in .env")
-
-client = make_client()
-FHIR_PROVIDER_ID = os.environ.get("PHENOML_FHIR_PROVIDER_ID", "")
-
-def as_dict(obj):
-    # by_alias=True is REQUIRED when you dump an SDK model for the FHIR API: SDK models use
-    # snake_case attrs (resource_type), but FHIR expects camelCase (resourceType).
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump(by_alias=True, exclude_none=True)
-    if isinstance(obj, list):
-        return [as_dict(x) for x in obj]
-    return obj
-
-def parse_json(text: str) -> dict:
-    """Best-effort: pull the first JSON object out of an LLM reply. ALWAYS returns a dict (empty if
-    none can be recovered) so every caller can safely .get() the result."""
-    try:
-        v = json.loads(text)
-        if isinstance(v, dict):
-            return v
-    except Exception:
-        pass
-    m = re.search(r"\{.*\}", text or "", re.DOTALL)
-    if m:
-        try:
-            v = json.loads(m.group(0))
-            if isinstance(v, dict):
-                return v
-        except Exception:
-            pass
-    return {}
-```
-
----
-
-## The clinical inputs (fixtures)
-
-Normally these come from the upstream pipeline (document→FHIR → IPS → EHR write-back; see [`run_demo.py`](./run_demo.py)). Here we hard-code them so this module runs top-to-bottom on its own. These are the **exact frozen inputs** used by the `approve-maria-garcia` eval case in [Part 2](./part-2-determinism-evals.md) — so the two modules tell one story.
-
-```python
-patient_id = "example-patient-0001"   # placeholder; in the full demo this is a real FHIR Patient id
-
-# The International Patient Summary (IPS): a clean, standards-based narrative of the patient.
-ips_text = """Patient: Maria Garcia (DOB: 1985-07-22, 40 years old)
-Gender: Female
-MRN: GBH-4471
-
-## Allergies and Intolerances
-• No known allergies
-
-## Medication List
-• No known medications
-
-## Problem List
-• Major depressive disorder, recurrent severe without psychotic features
-
-## General Observations
-• Mood interview total severity score during assessment period [CMS Assessment]: 31"""
-
-# Why is the medication history SEPARATE from the IPS? An IPS lists CURRENT/active meds only. These
-# three antidepressants are *failed past trials* (FHIR status completed/stopped), so they don't show
-# up in the IPS — but they are the key evidence for policy criterion #2, so we carry them alongside.
-med_history_text = (
-    "- Sertraline 200 mg daily for 10 weeks during the current episode — no meaningful response "
-    "(PHQ-9 remained > 18).\n"
-    "- Venlafaxine XR 225 mg daily for 9 weeks — minimal response, discontinued.\n"
-    "- Bupropion XL 300 mg — discontinued after 2 weeks due to intolerable agitation and insomnia."
-)
-
-# In production these are the provider's answers to the referral agent's follow-up questions.
-follow_up_answers = [
-    "Completed 16 sessions of cognitive behavioral therapy over 12 weeks with no significant "
-    "improvement; PHQ-9 remained 20 or higher throughout.",
-    "No personal or family history of seizures and no implanted magnetic-sensitive devices; "
-    "no psychotic features in the current episode.",
-]
-```
+> **Running the code.** This module *highlights* the key agent code and reasons about it — it does not repeat the setup boilerplate or the patient fixtures. To run the full pipeline, use the follow-along scripts in order — `step1_intake.py` → `step2_evaluate.py` → `step3_adjudicate.py` (see the [README → Run the demo](./README.md#run-the-demo)). The variables the snippets below reference come from there: `client` / `parse_json` / `as_dict` live in [`common.py`](./common.py), and `ips_text` / `med_history_text` / `follow_up_answers` / `patient_id` are produced by the intake in [`step1_intake.py`](./step1_intake.py).
 
 ---
 
@@ -160,7 +64,6 @@ rp = client.agent.prompts.create(name="tms-referral-intake", content=REFERRAL_AG
 referral_agent = client.agent.create(name="TMS Referral Intake Agent", prompts=[rp.data.id],
                                      provider=FHIR_PROVIDER_ID, tags=["tms", "prior-auth"])
 
-# IMPORTANT: the clinical data goes in `message`, NOT `context`.
 review = client.agent.chat.send(
     agent_id=referral_agent.data.id,
     message="Review the following International Patient Summary against the policy #297 rTMS "
@@ -169,14 +72,6 @@ review = client.agent.chat.send(
 print(review.response)
 follow_up_questions = parse_json(review.response).get("follow_up_questions", [])
 ```
-
-> **🔧 Exercise — break it (Break-it).** Move the IPS out of `message=` and pass it as `context=ips_text` instead (drop it from the message). Re-run. **What does the agent reply, and what does that tell you about how `context` is handled?**
->
-> <details><summary>▸ Reveal — message vs. context</summary>
->
-> The agent replies with something like *"please provide the patient information."* `agent.chat.send(context=...)` does **not** surface that field to the model — it's not the channel for the data you want reasoned over. Clinical content must go in `message`. This is one of the most common first-day mistakes with the SDK.
->
-> </details>
 
 > **🔍 Exercise — why not just `json.loads`? (Reason).** The prompt says *"Return ONLY JSON"*, yet `parse_json` still regex-searches for `{...}` rather than calling `json.loads(reply)` once. **Construct an agent reply that makes a bare `json.loads(reply)` raise, but that `parse_json` still recovers.**
 >
@@ -213,7 +108,7 @@ print("BCBS agent:", bcbs_agent.data.id)
 >
 > <details><summary>▸ Reveal — discussion</summary>
 >
-> **Verbatim:** auditable (a denial can be traced to the exact clause), no paraphrase drift, edge clauses survive — at the cost of tokens on every call and the risk of burying the model in boilerplate. **Summarized:** cheaper and faster, but *you* now own everything you dropped; a criterion the model can't see is one it can't apply. For payer adjudication, where any denial may be appealed, verbatim + *"cite the criteria you rely on, never invent criteria"* is the defensible default. Summarize only when the policy is huge **and** you can show the summary is lossless for the decisions you actually make.
+> **Verbatim:** auditable (a denial can be traced to the exact clause), no paraphrase drift, edge clauses survive — at the cost of tokens on every call and the risk of overwhelming the model with boilerplate. **Summarized:** cheaper and faster, but *you* now own everything you dropped; a criterion the model can't see is one it can't apply. For payer adjudication, where any denial may be appealed, verbatim + *"cite the criteria you rely on, never invent criteria"* is the defensible default. Summarize only when the policy is huge **and** you can show the summary is lossless for the decisions you actually make.
 >
 > </details>
 
@@ -432,11 +327,10 @@ for prompt_id in [rp.data.id, bcbs_prompt.data.id]:
 
 A checklist of the gotchas baked into the snippets above:
 
-1. **Clinical data goes in `message`, not `context`** — `agent.chat.send(context=...)` doesn't reach the model (you met this in §1.1).
-2. **Raise the client `timeout`** (≥300s) — agent reasoning and workflow-graph generation exceed the ~60s default and raise `ReadTimeout`.
-3. **Auth is OAuth client credentials** — `PhenomlClient(client_id=, client_secret=)` (v15-native).
-4. **`by_alias=True`** whenever you dump an SDK model to a dict for the FHIR API — otherwise fields come out snake_case and FHIR/IPS calls 500. You'll hit this in the full pipeline (`run_demo.py`); this module sidesteps it by starting from a ready-made summary.
-5. **IPS = current meds only** — failed/discontinued trials (`completed`/`stopped`) don't appear, which is why we carry `med_history_text` separately (see the fixtures). Also a `run_demo.py` lesson.
+1. **Raise the client `timeout`** (≥300s) — agent reasoning and workflow-graph generation exceed the ~60s default and raise `ReadTimeout`.
+2. **Auth is OAuth client credentials** — `PhenomlClient(client_id=, client_secret=)` (v15-native).
+3. **`by_alias=True`** whenever you dump an SDK model to a dict for the FHIR API — otherwise fields come out snake_case and FHIR/IPS calls 500. You'll hit this in the full runnable pipeline (`step1_intake.py` / `run_demo.py`), where SDK bundles are dumped for the FHIR/IPS calls — the highlighted snippets here sidestep it.
+4. **IPS = current meds only** — failed/discontinued trials (`completed`/`stopped`) don't appear, which is why we carry `med_history_text` separately (see [`step1_intake.py`](./step1_intake.py)). Also a `run_demo.py` lesson.
 
 **Policy text:** the BCBS-MA #297 criteria live in [`policy_297_tms.md`](./policy_297_tms.md), loaded verbatim as the payer agent's system prompt.
 
@@ -444,8 +338,8 @@ A checklist of the gotchas baked into the snippets above:
 
 ## 🎓 Capstone — port the pipeline to a different policy
 
-Pick a *different* payer medical policy (another procedure, or another payer's rTMS policy) and adapt this pipeline to it. **What's reusable as-is, what has to change, and where do the seams show?**
-- Which code is policy-agnostic (the agent scaffolding, `parse_json`, the submission shape) vs. policy-specific (the referral prompt's criteria list, the contraindication screen, the covered CPT codes)?
+Pick a *different* payer medical policy (another procedure, or another payer's rTMS policy) and adapt this pipeline to it. **What's reusable as-is, what has to change, and where's the boundary between the two?**
+- Which code is policy-agnostic (the agent setup code, `parse_json`, the submission shape) vs. policy-specific (the referral prompt's criteria list, the contraindication screen, the covered CPT codes)?
 - Does your new policy have criteria that *aren't* a simple "all must be met" gate (e.g. step-therapy ordering, time windows, quantity limits)? How would you encode those in the referral prompt and the adjudication schema?
 - What new evidence sources would the referral agent need to ask for?
 

@@ -10,7 +10,7 @@ Run:  .venv/bin/python step1_intake.py        (then step2_evaluate.py, then step
 import copy, json, sys, uuid
 
 from common import (HERE, load_env, make_client, resolve_provider, as_dict, parse_json,
-                    banner, retry, cleanup, load_state, save_state)
+                    banner, retry, cleanup, load_state, save_state, reset_state, fresh_requested)
 
 
 def run(client, env, provider, state, created):
@@ -18,7 +18,7 @@ def run(client, env, provider, state, created):
     banner("STEP 1.1  Referral note -> FHIR bundle (lang2fhir.create_multi)")
     note = (HERE / "sample_referral_note.txt").read_text()
     if state.get("bundle") and state.get("resources") is not None:
-        print("(reusing cached bundle from .state/ — delete .state/ to re-extract)")
+        print("(reusing cached bundle from .state/ — re-run with --fresh to re-extract)")
         bundle, extracted = state["bundle"], state["resources"]
     else:
         multi = retry(client.lang2fhir.create_multi, label="create_multi", text=note, version="R4")
@@ -43,7 +43,7 @@ def run(client, env, provider, state, created):
     print(f"patients in bundle: {len(patients)}")
     if len(patients) != 1:
         sys.exit(f"expected exactly 1 Patient in the bundle, found {len(patients)}; the IPS + "
-                 "EHR steps assume a single patient. Delete .state/ to re-extract.")
+                 "EHR steps assume a single patient. Re-run with --fresh to re-extract.")
     ips = retry(client.summary.create, label="summary.create", fhir_resources=bundle, mode="ips")
     ips_text = ips.summary or ""
     state["ips_text"] = ips_text
@@ -69,8 +69,7 @@ def run(client, env, provider, state, created):
     referral_agent = client.agent.create(name="TMS Referral Intake Agent", prompts=[rp.data.id],
                                           provider=provider, tags=["tms", "prior-auth"])
     created["agents"].append(referral_agent.data.id)
-    # The referral agent reviews the IPS (the clean patient summary) — data goes in the MESSAGE,
-    # because the agent does not surface the `context=` field to the model.
+    # The referral agent reviews the IPS (the clean patient summary).
     review = retry(client.agent.chat.send, label="referral.chat",
         agent_id=referral_agent.data.id,
         message=("Review the following International Patient Summary against the policy #297 rTMS "
@@ -129,6 +128,8 @@ if __name__ == "__main__":
     env = load_env()
     client = make_client(env)
     provider = resolve_provider(client, env)
+    if fresh_requested():
+        reset_state()
     state, created = load_state(), {"agents": [], "prompts": []}
     try:
         run(client, env, provider, state, created)

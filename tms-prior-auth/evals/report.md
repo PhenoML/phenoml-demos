@@ -1,12 +1,12 @@
 # TMS prior-auth — determinism & evals report
 
-_Generated 2026-06-09T01:59:02+00:00 · 3 repeats per case · adjudicate-only_
+_Generated 2026-06-10T03:22:07+00:00 · 3 repeats per case · adjudicate-only_
 
 | Case | Expected | Decision (k runs) | Codes | Cited | Stable | Correct |
 |------|----------|-------------------|-------|-------|--------|---------|
-| `approve-maria-garcia` | APPROVED | APPROVED 3/3 | 90867 | 3/3 | ✓ | ✓ |
+| `approve-maria-garcia` | APPROVED | APPROVED 3/3 | 90867 | 0/3 | ✓ | ✓ |
 | `deny-contraindication` | DENIED | DENIED 3/3 | — | 3/3 | ✓ | ✓ |
-| `deny-mild-mdd` | DENIED | DENIED 3/3 | — | 2/2 | ✗ | ✓ |
+| `deny-mild-mdd` | DENIED | DENIED 3/3 | — | 2/2 | ✓ | ✓ |
 | `deny-missing-psychotherapy` | DENIED | DENIED 3/3 | — | 1/1 | ✓ | ✓ |
 
 - **Decision accuracy:** 4/4 (100%)
