@@ -1,0 +1,19 @@
+{
+  "id": "approve-maria-garcia",
+  "description": "Severe treatment-resistant MDD meeting criteria 1 (severe + rating scale), 2a (two failed med trials) and 3 (failed psychotherapy); contraindication screen clear. Should APPROVE 90867. Inputs frozen from the demo's live run (IPS narrative + MedicationRequest history + follow-up answers).",
+  "submission": {
+    "requested_service": "rTMS for treatment-resistant major depressive disorder",
+    "cpt_codes": ["90867"],
+    "clinical_summary": "Patient: Maria Garcia (DOB: 1985-07-22, 40 years old)\nGender: Female\nMRN: GBH-4471\n\n## Allergies and Intolerances\n• No known allergies\n\n## Medication List\n• No known medications\n\n## Problem List\n• Major depressive disorder, recurrent severe without psychotic features\n\n## General Observations\n• Mood interview total severity score during assessment period [CMS Assessment]: 31",
+    "medication_trial_history": "- Sertraline 200 mg daily for 10 weeks during the current episode — no meaningful response (PHQ-9 remained > 18).\n- Venlafaxine XR 225 mg daily for 9 weeks — minimal response, discontinued.\n- Bupropion XL 300 mg — discontinued after 2 weeks due to intolerable agitation and insomnia.",
+    "supporting_evidence": [
+      "Completed 16 sessions of cognitive behavioral therapy over 12 weeks with no significant improvement; PHQ-9 remained 20 or higher throughout.",
+      "No personal or family history of seizures and no implanted magnetic-sensitive devices; no psychotic features in the current episode."
+    ]
+  },
+  "expected": {
+    "decision": "APPROVED",
+    "covered_codes": ["90867"],
+    "must_cite_any": ["condition 1", "condition 2", "condition 3"]
+  }
+}
