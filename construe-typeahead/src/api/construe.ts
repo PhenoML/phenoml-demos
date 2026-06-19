@@ -8,8 +8,9 @@ import {
 // ---------------------------------------------------------------------------
 // Construe API client.
 //
-// Auth: POST {baseUrl}/auth/token (OAuth2 client-credentials, creds in JSON
-// body). Token is fetched ONCE and cached with its expiry, reused across every
+// Auth: POST {baseUrl}/v2/auth/token (OAuth2 client-credentials, creds in JSON
+// body). NB: only the auth endpoint is v2-prefixed; the /construe/... search
+// endpoints below are not. Token is fetched ONCE and cached with its expiry, reused across every
 // keystroke, and only re-minted on expiry or a 401. We never mint per stroke.
 //
 // Search: GET {baseUrl}/construe/codes/{slug}/search/{text|semantic}?q=&limit=
@@ -53,7 +54,7 @@ function trimBase(baseUrl: string): string {
  * exact field names aren't pinned in-repo yet.
  */
 async function fetchToken(settings: Settings): Promise<CachedToken> {
-  const url = `${trimBase(settings.baseUrl)}/auth/token`;
+  const url = `${trimBase(settings.baseUrl)}/v2/auth/token`;
   let resp: Response;
   try {
     resp = await fetch(url, {
