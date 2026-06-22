@@ -16,6 +16,8 @@ interface RowBuilderProps {
   hint: string;
   placeholder: string;
   minLength?: number;
+  /** Strip parenthetical qualifiers from displayed labels/code descriptions. */
+  cleanLabels?: boolean;
 }
 
 // Generic "type a phrase → pick a ranked suggestion → commit display text +
@@ -28,12 +30,14 @@ export function RowBuilder({
   hint,
   placeholder,
   minLength = 2,
+  cleanLabels = false,
 }: RowBuilderProps) {
   const { commit, showCodes, entriesByKind } = useAppState();
   const { query, setQuery, suggestions, loading, error, reset } = useTypeahead({
     systems,
     mode,
     minLength,
+    cleanLabels,
   });
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
