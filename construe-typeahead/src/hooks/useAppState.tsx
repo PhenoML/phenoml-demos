@@ -2,30 +2,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import {
-  DEFAULT_SETTINGS,
   type CodedConcept,
   type CommittedEntry,
   type FieldKind,
-  type Settings,
 } from '../types';
-import { clearToken } from '../api/construe';
-
-// Seed Settings from Vite env vars (.env) when present, else DEFAULT_SETTINGS.
-// Keeping the Settings shape stable lets a localStorage build swap only the
-// storage layer without touching these signatures.
-function initialSettings(): Settings {
-  return {
-    clientId: import.meta.env.VITE_PHENOML_CLIENT_ID ?? DEFAULT_SETTINGS.clientId,
-    clientSecret:
-      import.meta.env.VITE_PHENOML_CLIENT_SECRET ?? DEFAULT_SETTINGS.clientSecret,
-    baseUrl: import.meta.env.VITE_PHENOML_BASE_URL || DEFAULT_SETTINGS.baseUrl,
-  };
-}
+import { fetchLiveConfig } from '../api/construe';
 
 let idCounter = 0;
 function makeId(): string {
@@ -37,9 +24,10 @@ function makeId(): string {
 }
 
 interface AppState {
-  // Config
-  settings: Settings;
-  updateSettings: (next: Settings) => void;
+  // Config — credentials live server-side (.env); the browser only learns
+  // whether Live mode is available, never the secret.
+  liveAvailable: boolean;
+  baseUrl: string;
   demoMode: boolean;
   setDemoMode: (on: boolean) => void;
   showCodes: boolean;
@@ -56,16 +44,23 @@ interface AppState {
 const AppStateContext = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [liveAvailable, setLiveAvailable] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('');
   const [demoMode, setDemoMode] = useState(true); // Demo Mode default ON
   const [showCodes, setShowCodes] = useState(false); // hidden by default
   const [entries, setEntries] = useState<CommittedEntry[]>([]);
 
-  const updateSettings = useCallback((next: Settings) => {
-    // Credentials/host changed → drop any cached token so the next live call
-    // re-authenticates against the new instance.
-    clearToken();
-    setSettings(next);
+  // Ask the proxy once whether credentials are configured server-side.
+  useEffect(() => {
+    let cancelled = false;
+    fetchLiveConfig().then((cfg) => {
+      if (cancelled) return;
+      setLiveAvailable(cfg.live);
+      setBaseUrl(cfg.baseUrl);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const commit = useCallback(
@@ -88,8 +83,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppState>(
     () => ({
-      settings,
-      updateSettings,
+      liveAvailable,
+      baseUrl,
       demoMode,
       setDemoMode,
       showCodes,
@@ -101,8 +96,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       entriesByKind,
     }),
     [
-      settings,
-      updateSettings,
+      liveAvailable,
+      baseUrl,
       demoMode,
       showCodes,
       entries,

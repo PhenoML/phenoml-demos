@@ -1,5 +1,4 @@
 import {
-  ActionIcon,
   Badge,
   Box,
   Group,
@@ -8,7 +7,7 @@ import {
   Text,
   Tooltip,
 } from '@mantine/core';
-import { IconCode, IconSettings, IconStethoscope } from '@tabler/icons-react';
+import { IconCode, IconStethoscope } from '@tabler/icons-react';
 import { useAppState } from '../hooks/useAppState';
 import { tokens } from '../theme';
 
@@ -17,14 +16,13 @@ export type Screen = 'encounter' | 'orders';
 export function TopBar({
   screen,
   onChangeScreen,
-  onOpenSettings,
 }: {
   screen: Screen;
   onChangeScreen: (s: Screen) => void;
-  onOpenSettings: () => void;
 }) {
-  const { demoMode, setDemoMode, showCodes, setShowCodes, settings } = useAppState();
-  const liveReady = Boolean(settings.clientId && settings.clientSecret);
+  const { demoMode, setDemoMode, showCodes, setShowCodes, liveAvailable } =
+    useAppState();
+  const liveReady = liveAvailable;
 
   return (
     <Box
@@ -92,8 +90,8 @@ export function TopBar({
           <Tooltip
             label={
               liveReady
-                ? 'Live calls the Construe API with your credentials'
-                : 'Add credentials in Settings to enable Live mode'
+                ? 'Live calls the Construe API through the local proxy'
+                : 'Set PhenoML credentials in .env to enable Live mode'
             }
             withArrow
           >
@@ -130,18 +128,6 @@ export function TopBar({
               {liveReady ? 'Live' : 'No creds'}
             </Badge>
           )}
-
-          <Tooltip label="Connection settings" withArrow>
-            <ActionIcon
-              variant="default"
-              size="lg"
-              radius="md"
-              aria-label="Settings"
-              onClick={onOpenSettings}
-            >
-              <IconSettings size={19} />
-            </ActionIcon>
-          </Tooltip>
         </Group>
       </Group>
     </Box>

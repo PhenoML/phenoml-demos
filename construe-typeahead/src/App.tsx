@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { Badge, Box, Group, Stack, Text } from '@mantine/core';
 import { IconBulb, IconEyeOff } from '@tabler/icons-react';
-import { useDisclosure } from '@mantine/hooks';
 import { TopBar, type Screen } from './components/TopBar';
-import { SettingsPanel } from './components/SettingsPanel';
 import { EncounterScreen } from './screens/EncounterScreen';
 import { OrdersScreen } from './screens/OrdersScreen';
 import { useAppState } from './hooks/useAppState';
@@ -11,16 +9,11 @@ import { tokens } from './theme';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('encounter');
-  const [settingsOpened, settings] = useDisclosure(false);
   const { demoMode, showCodes, entries } = useAppState();
 
   return (
     <Box>
-      <TopBar
-        screen={screen}
-        onChangeScreen={setScreen}
-        onOpenSettings={settings.open}
-      />
+      <TopBar screen={screen} onChangeScreen={setScreen} />
 
       <Box
         style={{
@@ -109,8 +102,6 @@ export default function App() {
           )}
         </Group>
       </Box>
-
-      <SettingsPanel opened={settingsOpened} onClose={settings.close} />
     </Box>
   );
 }
