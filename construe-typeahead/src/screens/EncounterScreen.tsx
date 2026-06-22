@@ -20,6 +20,7 @@ export function EncounterScreen() {
         <RowBuilder
           kind="problem"
           systems={PROBLEM_SYSTEMS}
+          cleanLabels
           label="Add a problem"
           hint="Type a condition — e.g. “asth”. Each problem is stored as both a SNOMED and an ICD-10-CM code."
           placeholder="Start typing a condition…"

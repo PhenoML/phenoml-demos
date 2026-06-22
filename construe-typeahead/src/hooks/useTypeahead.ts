@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDebouncedValue } from '@mantine/hooks';
 import { searchSemantic, searchText } from '../api/construe';
 import { rankResults } from '../api/ranking';
+import { cleanDisplay } from '../api/labels';
 import { demoSemanticSearch, demoTextSearch } from '../demo/fixtures';
 import { useAppState } from './useAppState';
 import {
@@ -28,6 +29,12 @@ interface UseTypeaheadArgs {
   mode: SearchMode;
   /** Minimum trimmed query length before a search fires. */
   minLength?: number;
+  /**
+   * When true, strip parenthetical qualifiers from the displayed label and
+   * code descriptions (e.g. "Essential (primary) hypertension" →
+   * "Essential hypertension"). Codes are never altered — display text only.
+   */
+  cleanLabels?: boolean;
 }
 
 export interface TypeaheadState {
@@ -53,10 +60,16 @@ function buildSuggestions(
   systems: CodeSystemSlug[],
   responses: Record<string, TextSearchResponse>,
   mode: SearchMode,
+  cleanLabels: boolean,
 ): Suggestion[] {
   const [primarySlug, ...secondarySlugs] = systems;
   const primary = responses[primarySlug];
   if (!primary) return [];
+
+  // Ranking runs on the RAW description; cleaning is applied afterwards to the
+  // text that ships to the UI, so display tidying never changes result order.
+  const shape = (item: SearchResultItem): SearchResultItem =>
+    cleanLabels ? { ...item, description: cleanDisplay(item.description) } : item;
 
   // Semantic results are already ranked by meaning server-side; only re-rank
   // substring-based text results.
@@ -70,20 +83,24 @@ function buildSuggestions(
     const resp = responses[slug];
     if (!resp || resp.results.length === 0) continue;
     const ranked = mode === 'text' ? rankResults(query, resp.results) : resp.results;
-    secondaryTops.push(toConcept(resp.system, ranked[0]));
+    secondaryTops.push(toConcept(resp.system, shape(ranked[0])));
   }
 
-  return primaryItems.map((item) => ({
-    id: `${primarySlug}:${item.code}`,
-    label: item.description,
-    codes: [toConcept(primary.system, item), ...secondaryTops],
-  }));
+  return primaryItems.map((item) => {
+    const shaped = shape(item);
+    return {
+      id: `${primarySlug}:${item.code}`,
+      label: shaped.description,
+      codes: [toConcept(primary.system, shaped), ...secondaryTops],
+    };
+  });
 }
 
 export function useTypeahead({
   systems,
   mode,
   minLength = 2,
+  cleanLabels = false,
 }: UseTypeaheadArgs): TypeaheadState {
   const { settings, demoMode } = useAppState();
   const [query, setQuery] = useState('');
@@ -139,7 +156,7 @@ export function useTypeahead({
         });
 
         if (myReq !== reqId.current) return;
-        setSuggestions(buildSuggestions(q, systems, responses, mode));
+        setSuggestions(buildSuggestions(q, systems, responses, mode, cleanLabels));
         setLoading(false);
       } catch (err) {
         if (myReq !== reqId.current) return;
@@ -153,7 +170,7 @@ export function useTypeahead({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, demoMode, settings, mode, systemsKey, minLength]);
+  }, [debounced, demoMode, settings, mode, systemsKey, minLength, cleanLabels]);
 
   function reset() {
     setQuery('');
