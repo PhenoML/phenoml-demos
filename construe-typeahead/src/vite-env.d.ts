@@ -1,11 +1,4 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_PHENOML_CLIENT_ID?: string;
-  readonly VITE_PHENOML_CLIENT_SECRET?: string;
-  readonly VITE_PHENOML_BASE_URL?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
+// No custom client env vars: PhenoML credentials are read server-side only
+// (see server/construeProxy + vite.config.ts) and never exposed to the browser.

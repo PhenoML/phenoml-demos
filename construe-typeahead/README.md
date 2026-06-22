@@ -41,9 +41,10 @@ prefix.
 - **Demo Mode (default ON)** — baked responses shaped exactly like a real Construe
   `TextSearchResponse`. No credentials, fully standalone. Try `asth`, `albut`,
   `shortness of breath` (note), `lipid panel`, `a1c`.
-- **Live Mode** — debounced (250 ms) calls to a real Construe instance using the
-  configured credentials. A single OAuth token is fetched once and reused across all
-  keystrokes (re-auth only on expiry or a 401).
+- **Live Mode** — debounced (250 ms) calls to a real Construe instance, made through a
+  **same-origin proxy** so the client secret never reaches the browser. The proxy holds
+  the credentials, fetches a single OAuth token once, and reuses it across all keystrokes
+  (re-auth only on expiry or a 401).
 
 ## Run it
 
@@ -69,37 +70,54 @@ cp .env.example .env
 ```
 
 ```dotenv
-VITE_PHENOML_CLIENT_ID=your_client_id
-VITE_PHENOML_CLIENT_SECRET=your_client_secret
-VITE_PHENOML_BASE_URL=https://experiment.app.pheno.ml
+PHENOML_CLIENT_ID=your_client_id
+PHENOML_CLIENT_SECRET=your_client_secret
+PHENOML_BASE_URL=https://experiment.app.pheno.ml   # optional
 ```
 
-These seed the in-app **Settings** panel (gear icon). You can also enter/override them
-there at runtime, and the **base URL is swappable** so you can point at any instance.
+These are read **server-side only** by the proxy middleware (`server/construeProxy.mjs`,
+mounted in `vite.config.ts`). They are **never** shipped to the browser — note the absence
+of the `VITE_` prefix, which is exactly what would inline a value into the client bundle.
+Restart the dev server after editing `.env`.
 
-> ⚠️ **Internal / dev use only.** In Live mode the client secret is sent from the
-> browser. Do **not** paste production credentials, and never share a public link that
-> bakes them in. For demos, leave Demo Mode on — it needs no credentials.
+> 🔒 **The client secret stays on the server.** The browser only ever calls the
+> same-origin `/api/*` proxy — it never sees the credentials or the OAuth token. This is
+> the pattern to copy when building your own app: keep the secret behind a server you
+> control, mint the token there, and proxy the API.
 
-### CORS caveat
+### How Live mode reaches Construe
 
-Live mode makes browser `fetch` calls directly to the Construe instance. If the instance
-does **not** return permissive CORS headers, the browser will block the call and Live
-mode will fail. **Demo Mode is the reliable default** and needs no network access. If you
-need Live mode locally against a CORS-restricted instance, proxy the requests (e.g. a
-small dev proxy or a server-side relay) so the browser sees a same-origin response.
+The browser calls same-origin `/api/*`; the proxy adds the Bearer token and forwards to
+Construe. Because the browser talks to the same origin, there's **no CORS** to configure
+and **no secret in the page**. Demo Mode needs no server at all.
+
+> ⚠️ **Production note.** The proxy runs as Vite dev/preview middleware, so it's active
+> under `npm run dev` and `npm run preview` but **not** in a bare static `dist/` deploy.
+> To deploy, host the same handler (`server/construeProxy.mjs`) behind a server you run
+> (Express, a serverless function, an edge worker, …) and serve the built `dist/` from the
+> same origin so `/api/*` resolves to it.
 
 Handled gracefully in the UI: `401` (re-auth + retry once), `404` (code system not
-found), `501` (search not configured for that system), CORS/network failures, and empty
+found), `501` (search not configured for that system), proxy/network failures, and empty
 results.
 
 ## API contract
 
+The browser talks only to the same-origin proxy:
+
 ```
-POST {baseUrl}/auth/token                 # OAuth2 client-credentials, creds in JSON body
+GET  /api/config                                   # { live, baseUrl } — no secret
+GET  /api/search/text/{slug}?q={query}&limit=8
+GET  /api/search/semantic/{slug}?q={query}&limit=8
+```
+
+The proxy (`server/construeProxy.mjs`) holds the credentials and calls Construe:
+
+```
+POST {baseUrl}/v2/auth/token              # OAuth2 client-credentials, creds in JSON body
 GET  {baseUrl}/construe/codes/{slug}/search/text?q={query}&limit=8
 GET  {baseUrl}/construe/codes/{slug}/search/semantic?q={query}&limit=8
-                                           # Authorization: Bearer <token>
+                                          # Authorization: Bearer <token>
 ```
 
 Response shape (system name/version is on the parent `system` object, not per result):
@@ -115,29 +133,25 @@ A stored coded concept is composed from `system.name` + `result.code` + `result.
 ## Architecture
 
 ```
+server/
+  construeProxy.mjs   holds .env credentials; mints/caches the OAuth token; proxies
+                      /api/config + /api/search/* to Construe (mounted by vite.config.ts)
 src/
-  api/construe.ts     token cache + searchText/searchSemantic + error handling
+  api/construe.ts     thin same-origin client: searchText/searchSemantic + /api/config
   api/ranking.ts      client-side re-ranking (pure, testable)
   demo/fixtures.ts    baked TextSearchResponse data + semantic keyword map
-  hooks/useAppState   settings (env-seeded) + demo/show-codes + committed-code store
+  hooks/useAppState   live-availability (from /api/config) + demo/show-codes + code store
   hooks/useTypeahead  debounced demo/live search; runs multi-system; applies ranking
-  components/         TopBar, SettingsPanel, RowBuilder, SuggestionList,
+  components/         TopBar, RowBuilder, SuggestionList,
                       NoteField + ChipRail, CommittedEntry, CodeBadge, Panel
   screens/            EncounterScreen, OrdersScreen
 ```
 
-### Settings shape (stable for a localStorage port)
+### Where the credentials live
 
-The Claude artifact sandbox blocks `localStorage`, so Settings is backed by React state.
-The signatures are kept identical so the app ports to a `localStorage` build unchanged —
-only the storage layer in `hooks/useAppState.tsx` would change:
-
-```ts
-export type Settings = { clientId: string; clientSecret: string; baseUrl: string };
-export const DEFAULT_SETTINGS: Settings = {
-  clientId: '', clientSecret: '', baseUrl: 'https://experiment.app.pheno.ml',
-};
-```
+Credentials are read **only** in `server/construeProxy.mjs` (from `.env`, via `loadEnv` in
+`vite.config.ts`). The browser learns whether Live mode is available from `GET /api/config`
+(`{ live, baseUrl }`, no secret) — it never holds the client ID, secret, or token.
 
 ## Stack
 

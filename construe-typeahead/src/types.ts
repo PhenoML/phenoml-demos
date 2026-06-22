@@ -1,17 +1,4 @@
 // ---------------------------------------------------------------------------
-// Settings — keep this shape EXACTLY. The Claude artifact sandbox blocks
-// localStorage, so we back it with React state, but these signatures stay
-// identical so the app ports to a localStorage build unchanged.
-// ---------------------------------------------------------------------------
-export type Settings = { clientId: string; clientSecret: string; baseUrl: string };
-
-export const DEFAULT_SETTINGS: Settings = {
-  clientId: '',
-  clientSecret: '',
-  baseUrl: 'https://experiment.app.pheno.ml',
-};
-
-// ---------------------------------------------------------------------------
 // Construe code systems (exact path slugs — do not alter)
 // ---------------------------------------------------------------------------
 export type CodeSystemSlug =

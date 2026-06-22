@@ -102,7 +102,7 @@ export function useTypeahead({
   minLength = 2,
   cleanLabels = false,
 }: UseTypeaheadArgs): TypeaheadState {
-  const { settings, demoMode } = useAppState();
+  const { demoMode } = useAppState();
   const [query, setQuery] = useState('');
   const [debounced] = useDebouncedValue(query, 250);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -134,8 +134,8 @@ export function useTypeahead({
           : demoTextSearch(slug, q);
       }
       return mode === 'semantic'
-        ? searchSemantic(settings, slug, q)
-        : searchText(settings, slug, q);
+        ? searchSemantic(slug, q)
+        : searchText(slug, q);
     }
 
     (async () => {
@@ -170,7 +170,7 @@ export function useTypeahead({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, demoMode, settings, mode, systemsKey, minLength, cleanLabels]);
+  }, [debounced, demoMode, mode, systemsKey, minLength, cleanLabels]);
 
   function reset() {
     setQuery('');
