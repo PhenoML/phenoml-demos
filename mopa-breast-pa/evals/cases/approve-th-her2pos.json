@@ -1,0 +1,13 @@
+{
+  "id": "approve-th-her2pos",
+  "description": "All required data on file and HER2 POSITIVE. TH (paclitaxel + trastuzumab) for adjuvant HER2-positive breast cancer is NCCN Category 1, which UM-9 treats as a medically accepted use. Should APPROVE (Response A: pre-approved + Coverage).",
+  "submission": {
+    "requested_service": "TH (paclitaxel + trastuzumab) adjuvant, breast cancer",
+    "her2": "positive",
+    "include": ["condition", "stage", "er", "pr", "ecog", "regimen"]
+  },
+  "expected": {
+    "decision": "APPROVED",
+    "must_cite_any": ["category 1", "medically accepted"]
+  }
+}

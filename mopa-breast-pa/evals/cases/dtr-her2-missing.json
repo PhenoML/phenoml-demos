@@ -1,0 +1,13 @@
+{
+  "id": "dtr-her2-missing",
+  "description": "Diagnosis, stage, and ER/PR on file, but HER2 is MISSING (the demo's deliberate gap: equivocal IHC with ISH pending). Medical acceptance of TH cannot be evaluated without HER2, so the request is pended for more information. Should return NEEDS_INFO (Response B: DTR card), without calling the judgment agent, the readiness gate is deterministic by construction.",
+  "submission": {
+    "requested_service": "TH (paclitaxel + trastuzumab) adjuvant, breast cancer",
+    "her2": "missing",
+    "include": ["condition", "stage", "er", "pr", "ecog", "regimen"]
+  },
+  "expected": {
+    "decision": "NEEDS_INFO",
+    "must_cite_any": ["her2", "additional information"]
+  }
+}

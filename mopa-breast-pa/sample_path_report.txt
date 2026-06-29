@@ -1,0 +1,51 @@
+SURGICAL PATHOLOGY REPORT - BREAST CORE NEEDLE BIOPSY
+
+Date: 2026-06-10
+Ordering provider: Dr. Priya Nadkarni, MD - Lakeside Oncology
+Patient: Jane Smith
+DOB: 1971-03-04 | Sex: Female | MRN: LSO-2208
+Insurance: Commercial plan (oncology utilization management delegated to OncoHealth)
+
+SPECIMEN
+Right breast, 2 o'clock, ultrasound-guided core needle biopsy.
+
+DIAGNOSIS
+Invasive ductal carcinoma (no special type), right breast. Nottingham histologic
+grade 2 (tubule 3, nuclear 2, mitotic 1). Lymphovascular invasion not identified.
+
+CLINICAL STAGE (AJCC 8th edition)
+T2 N1 M0 - Stage IIB. Primary tumor 2.6 cm by ultrasound; one mobile ipsilateral
+axillary node clinically involved; no evidence of distant metastasis on staging
+workup.
+
+BIOMARKERS / RECEPTOR STATUS (immunohistochemistry on the core biopsy)
+- Estrogen receptor (ER): NEGATIVE. 0% nuclear staining.
+- Progesterone receptor (PR): NEGATIVE. 0% nuclear staining.
+- HER2/neu (IHC): 2+ - EQUIVOCAL. Reflex in-situ hybridization (ISH) has been
+  ordered to resolve HER2 status; ISH result is PENDING at the time of this report.
+- Ki-67 proliferation index: approximately 30%.
+
+PERFORMANCE STATUS
+ECOG performance status 0 (fully active).
+
+ASSESSMENT
+Newly diagnosed invasive ductal carcinoma of the right breast, ER-/PR-, HER2
+equivocal pending ISH, clinical Stage IIB. Patient is a candidate for adjuvant
+systemic therapy following definitive surgery.
+
+PLAN
+Refer to medical oncology for adjuvant systemic therapy and prior authorization.
+Regimen under consideration: paclitaxel + trastuzumab (TH), weekly, 12 weeks,
+adjuvant intent.
+
+----------------------------------------------------------------------------
+NOTE FOR THE DEMO: This pathology report documents the diagnosis (invasive ductal
+carcinoma), the clinical stage (T2 N1 M0, IIB), and ER/PR receptor status, but the
+HER2 result is EQUIVOCAL (IHC 2+) with reflex ISH still pending, so a definitive
+HER2 status is NOT on file. HER2 is the load-bearing data element for this regimen:
+the ordered TH (paclitaxel + trastuzumab) is the accepted adjuvant regimen only for
+HER2-POSITIVE disease. The readiness step (Step 1.5) must detect that HER2 is not
+yet resolved and collect it before prior authorization can proceed (the DTR /
+needs-more-info path). Once HER2 resolves POSITIVE, TH for adjuvant HER2+ breast
+cancer is NCCN Category 1 (medically accepted under UM-9) and is APPROVED; were HER2
+NEGATIVE, TH would not be the accepted adjuvant regimen and would be DENIED.

@@ -1,0 +1,13 @@
+{
+  "id": "deny-her2neg",
+  "description": "All required data on file but HER2 NEGATIVE. For adjuvant HER2-negative breast cancer, TH (which includes the HER2-targeted agent trastuzumab) is not a listed Category 1-2A use, so it is not a medically accepted use under UM-9. Should DENY (not medically accepted), no covered codes.",
+  "submission": {
+    "requested_service": "TH (paclitaxel + trastuzumab) adjuvant, breast cancer",
+    "her2": "negative",
+    "include": ["condition", "stage", "er", "pr", "ecog", "regimen"]
+  },
+  "expected": {
+    "decision": "DENIED",
+    "must_cite_any": ["not medically accepted", "her2"]
+  }
+}
