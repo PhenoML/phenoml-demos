@@ -22,17 +22,17 @@ interface UseTypeaheadArgs {
   /**
    * Code systems to query. The FIRST is the display/primary system whose
    * ranked results become the suggestion labels; any additional systems
-   * contribute their top-ranked concept so a single accepted suggestion can
-   * store codes across systems (e.g. problem list → SNOMED + ICD-10-CM).
+   * contribute their top-ranked search result for the same query. This is
+   * useful for side-by-side demo reveal; it is not cross-system mapping.
    */
   systems: CodeSystemSlug[];
   mode: SearchMode;
   /** Minimum trimmed query length before a search fires. */
   minLength?: number;
   /**
-   * When true, strip parenthetical qualifiers from the displayed label and
-   * code descriptions (e.g. "Essential (primary) hypertension" →
-   * "Essential hypertension"). Codes are never altered — display text only.
+   * When true, strip parenthetical qualifiers from the displayed label (e.g.
+   * "Essential (primary) hypertension" → "Essential hypertension"). Stored
+   * code descriptions keep the raw API text.
    */
   cleanLabels?: boolean;
 }
@@ -76,14 +76,14 @@ function buildSuggestions(
   const primaryItems =
     mode === 'text' ? rankResults(query, primary.results) : primary.results;
 
-  // Each additional system contributes its single best concept for the query,
-  // so accepting one suggestion stores codes across all configured systems.
+  // Each additional system contributes its single best search result for the
+  // same query. This is not a cross-system mapping.
   const secondaryTops: CodedConcept[] = [];
   for (const slug of secondarySlugs) {
     const resp = responses[slug];
     if (!resp || resp.results.length === 0) continue;
     const ranked = mode === 'text' ? rankResults(query, resp.results) : resp.results;
-    secondaryTops.push(toConcept(resp.system, shape(ranked[0])));
+    secondaryTops.push(toConcept(resp.system, ranked[0]));
   }
 
   return primaryItems.map((item) => {
@@ -91,7 +91,7 @@ function buildSuggestions(
     return {
       id: `${primarySlug}:${item.code}`,
       label: shaped.description,
-      codes: [toConcept(primary.system, shaped), ...secondaryTops],
+      codes: [toConcept(primary.system, item), ...secondaryTops],
     };
   });
 }
@@ -103,7 +103,7 @@ export function useTypeahead({
   cleanLabels = false,
 }: UseTypeaheadArgs): TypeaheadState {
   const { demoMode } = useAppState();
-  const [query, setQuery] = useState('');
+  const [query, setQueryState] = useState('');
   const [debounced] = useDebouncedValue(query, 250);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,6 +112,7 @@ export function useTypeahead({
 
   // Guards against out-of-order responses clobbering newer ones.
   const reqId = useRef(0);
+  const activeController = useRef<AbortController | null>(null);
   const systemsKey = systems.join(',');
 
   useEffect(() => {
@@ -124,42 +125,49 @@ export function useTypeahead({
     }
 
     const myReq = ++reqId.current;
+    const controller = new AbortController();
+    activeController.current = controller;
     setLoading(true);
     setError(null);
 
-    async function fetchSystem(slug: CodeSystemSlug): Promise<TextSearchResponse> {
+    async function fetchSystem(
+      slug: CodeSystemSlug,
+      signal: AbortSignal,
+    ): Promise<TextSearchResponse> {
       if (demoMode) {
         return mode === 'semantic'
           ? demoSemanticSearch(q)
           : demoTextSearch(slug, q);
       }
       return mode === 'semantic'
-        ? searchSemantic(slug, q)
-        : searchText(slug, q);
+        ? searchSemantic(slug, q, 8, signal)
+        : searchText(slug, q, 8, signal);
     }
 
     (async () => {
       try {
-        const [primarySlug, ...secondarySlugs] = systems;
-        // Primary failure surfaces an error; secondary failures degrade quietly
-        // (e.g. one system returns 501) so the primary still works.
-        const primaryResp = await fetchSystem(primarySlug);
-        const secondarySettled = await Promise.allSettled(
-          secondarySlugs.map((s) => fetchSystem(s)),
+        // Start all system requests together. Primary failure surfaces an error;
+        // secondary failures degrade quietly (e.g. one system returns 501) so
+        // the primary still works.
+        const settled = await Promise.allSettled(
+          systems.map((s) => fetchSystem(s, controller.signal)),
         );
+        const primarySlug = systems[0];
+        const primaryResult = settled[0];
+        if (primaryResult.status === 'rejected') throw primaryResult.reason;
 
         const responses: Record<string, TextSearchResponse> = {
-          [primarySlug]: primaryResp,
+          [primarySlug]: primaryResult.value,
         };
-        secondarySettled.forEach((res, i) => {
-          if (res.status === 'fulfilled') responses[secondarySlugs[i]] = res.value;
+        settled.slice(1).forEach((res, i) => {
+          if (res.status === 'fulfilled') responses[systems[i + 1]] = res.value;
         });
 
         if (myReq !== reqId.current) return;
         setSuggestions(buildSuggestions(q, systems, responses, mode, cleanLabels));
         setLoading(false);
       } catch (err) {
-        if (myReq !== reqId.current) return;
+        if (controller.signal.aborted || myReq !== reqId.current) return;
         const kind: SearchErrorKind =
           err instanceof SearchError ? err.kind : 'unknown';
         const message =
@@ -169,11 +177,26 @@ export function useTypeahead({
         setLoading(false);
       }
     })();
+    return () => {
+      reqId.current += 1;
+      if (activeController.current === controller) {
+        activeController.current = null;
+      }
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, demoMode, mode, systemsKey, minLength, cleanLabels]);
 
+  function setQuery(q: string) {
+    reqId.current += 1;
+    activeController.current?.abort();
+    setQueryState(q);
+  }
+
   function reset() {
-    setQuery('');
+    reqId.current += 1;
+    activeController.current?.abort();
+    setQueryState('');
     setSuggestions([]);
     setError(null);
     setLoading(false);

@@ -13,7 +13,7 @@ import {
 // holds the .env credentials, mints/caches the token, and forwards searches to
 // Construe. So there is no auth, no Bearer header, and no CORS here.
 //
-//   GET /api/config                       -> { live, baseUrl }
+//   GET /api/config                       -> { live }
 //   GET /api/search/{text|semantic}/{slug}?q=&limit=
 // ---------------------------------------------------------------------------
 
@@ -29,20 +29,19 @@ const VALID_KINDS: ReadonlySet<string> = new Set([
 
 export interface LiveConfig {
   live: boolean;
-  baseUrl: string;
 }
 
 /** Ask the proxy whether Live mode is configured (creds present in .env). */
 export async function fetchLiveConfig(): Promise<LiveConfig> {
   try {
     const resp = await fetch('/api/config');
-    if (!resp.ok) return { live: false, baseUrl: '' };
+    if (!resp.ok) return { live: false };
     const data = (await resp.json().catch(() => null)) as LiveConfig | null;
-    if (!data || typeof data.live !== 'boolean') return { live: false, baseUrl: '' };
+    if (!data || typeof data.live !== 'boolean') return { live: false };
     return data;
   } catch {
     // Proxy not reachable (e.g. static build with no server) → Demo-only.
-    return { live: false, baseUrl: '' };
+    return { live: false };
   }
 }
 
@@ -66,6 +65,7 @@ async function search(
   mode: SearchMode,
   query: string,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<TextSearchResponse> {
   const url = `/api/search/${mode}/${encodeURIComponent(slug)}?q=${encodeURIComponent(
     query,
@@ -73,8 +73,9 @@ async function search(
 
   let resp: Response;
   try {
-    resp = await fetch(url);
+    resp = await fetch(url, { signal });
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new SearchError(
       'network',
       `Could not reach the proxy. Is the dev server running? (${
@@ -96,14 +97,16 @@ export function searchText(
   slug: CodeSystemSlug,
   query: string,
   limit = 8,
+  signal?: AbortSignal,
 ): Promise<TextSearchResponse> {
-  return search(slug, 'text', query, limit);
+  return search(slug, 'text', query, limit, signal);
 }
 
 export function searchSemantic(
   slug: CodeSystemSlug,
   query: string,
   limit = 8,
+  signal?: AbortSignal,
 ): Promise<TextSearchResponse> {
-  return search(slug, 'semantic', query, limit);
+  return search(slug, 'semantic', query, limit, signal);
 }

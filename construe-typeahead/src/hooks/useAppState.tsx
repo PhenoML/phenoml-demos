@@ -27,7 +27,6 @@ interface AppState {
   // Config — credentials live server-side (.env); the browser only learns
   // whether Live mode is available, never the secret.
   liveAvailable: boolean;
-  baseUrl: string;
   demoMode: boolean;
   setDemoMode: (on: boolean) => void;
   showCodes: boolean;
@@ -45,7 +44,6 @@ const AppStateContext = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [liveAvailable, setLiveAvailable] = useState(false);
-  const [baseUrl, setBaseUrl] = useState('');
   const [demoMode, setDemoMode] = useState(true); // Demo Mode default ON
   const [showCodes, setShowCodes] = useState(false); // hidden by default
   const [entries, setEntries] = useState<CommittedEntry[]>([]);
@@ -56,7 +54,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     fetchLiveConfig().then((cfg) => {
       if (cancelled) return;
       setLiveAvailable(cfg.live);
-      setBaseUrl(cfg.baseUrl);
     });
     return () => {
       cancelled = true;
@@ -84,7 +81,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       liveAvailable,
-      baseUrl,
       demoMode,
       setDemoMode,
       showCodes,
@@ -97,7 +93,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     [
       liveAvailable,
-      baseUrl,
       demoMode,
       showCodes,
       entries,

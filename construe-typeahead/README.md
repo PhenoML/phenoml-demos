@@ -15,14 +15,14 @@ Powered by [PhenoML Construe](https://developer.pheno.ml) code search.
   free-text clinical note.
 - **Orders** screen — an order-entry field.
 - Accepting a suggestion commits **display text** to the UI and **code(s)** to an
-  in-memory store. Flip **Show codes** to reveal the stored `system · code · description`
-  next to every committed entry.
+  in-memory demo state object. Flip **Show codes** to reveal the captured
+  `system · code · description` next to every committed entry.
 
 ### Two search endpoints, by purpose
 
 | Field | Code system(s) | Endpoint | Why |
 | --- | --- | --- | --- |
-| Problem list | `SNOMED_CT_US_LITE` + `ICD-10-CM` | **text** | Fast prefix/substring type-ahead; stores **both** codes per problem |
+| Problem list | `SNOMED_CT_US_LITE` + `ICD-10-CM` | **text** | Fast prefix/substring type-ahead; stores the selected SNOMED result plus the top ICD-10-CM result for the same query |
 | Medication | `RXNORM` | **text** | Prefix/substring type-ahead |
 | Orders | `LOINC` | **text** | Prefix/substring type-ahead |
 | Clinical note | `SNOMED_CT_US_LITE` | **semantic** | The clinician writes a phrase, not a prefix — semantic finds the concept by meaning |
@@ -45,6 +45,10 @@ prefix.
   **same-origin proxy** so the client secret never reaches the browser. The proxy holds
   the credentials, fetches a single OAuth token once, and reuses it across all keystrokes
   (re-auth only on expiry or a 401).
+
+This demo does not perform cross-system mapping. For the problem list, SNOMED drives the
+displayed suggestions; the app also captures the top ICD-10-CM search result for the same
+typed query so the code reveal can show both systems side by side.
 
 ## Run it
 
@@ -96,6 +100,8 @@ and **no secret in the page**. Demo Mode needs no server at all.
 > To deploy, host the same handler (`server/construeProxy.mjs`) behind a server you run
 > (Express, a serverless function, an edge worker, …) and serve the built `dist/` from the
 > same origin so `/api/*` resolves to it.
+> Before productionizing Live Mode, add application authentication, rate limiting, request
+> logging, and abuse controls appropriate for a credentialed API proxy.
 
 Handled gracefully in the UI: `401` (re-auth + retry once), `404` (code system not
 found), `501` (search not configured for that system), proxy/network failures, and empty
@@ -106,7 +112,7 @@ results.
 The browser talks only to the same-origin proxy:
 
 ```
-GET  /api/config                                   # { live, baseUrl } — no secret
+GET  /api/config                                   # { live } — no secret
 GET  /api/search/text/{slug}?q={query}&limit=8
 GET  /api/search/semantic/{slug}?q={query}&limit=8
 ```
@@ -116,7 +122,7 @@ The proxy (`server/construeProxy.mjs`) holds the credentials and calls Construe:
 ```
 POST {baseUrl}/v2/auth/token              # OAuth2 client-credentials, creds in JSON body
 GET  {baseUrl}/construe/codes/{slug}/search/text?q={query}&limit=8
-GET  {baseUrl}/construe/codes/{slug}/search/semantic?q={query}&limit=8
+GET  {baseUrl}/construe/codes/{slug}/search/semantic?text={query}&limit=8
                                           # Authorization: Bearer <token>
 ```
 
@@ -141,7 +147,8 @@ src/
   api/ranking.ts      client-side re-ranking (pure, testable)
   demo/fixtures.ts    baked TextSearchResponse data + semantic keyword map
   hooks/useAppState   live-availability (from /api/config) + demo/show-codes + code store
-  hooks/useTypeahead  debounced demo/live search; runs multi-system; applies ranking
+  hooks/useTypeahead  debounced demo/live search; runs multi-system search in parallel;
+                      applies ranking
   components/         TopBar, RowBuilder, SuggestionList,
                       NoteField + ChipRail, CommittedEntry, CodeBadge, Panel
   screens/            EncounterScreen, OrdersScreen
@@ -151,7 +158,7 @@ src/
 
 Credentials are read **only** in `server/construeProxy.mjs` (from `.env`, via `loadEnv` in
 `vite.config.ts`). The browser learns whether Live mode is available from `GET /api/config`
-(`{ live, baseUrl }`, no secret) — it never holds the client ID, secret, or token.
+(`{ live }`, no secret) — it never holds the client ID, secret, token, or instance URL.
 
 ## Stack
 

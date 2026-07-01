@@ -6,7 +6,8 @@ import type { CodeSystemSlug } from '../types';
 
 // Problem list runs BOTH systems — SNOMED is the display/ranking system (its
 // plain "Asthma" should beat the co-occurrent descriptors), and the top
-// ICD-10-CM hit is attached so each problem stores both codes.
+// ICD-10-CM search result for the same query is attached for side-by-side
+// code reveal. This is not cross-system mapping.
 const PROBLEM_SYSTEMS: CodeSystemSlug[] = ['SNOMED_CT_US_LITE', 'ICD-10-CM'];
 const MEDICATION_SYSTEMS: CodeSystemSlug[] = ['RXNORM'];
 
@@ -22,7 +23,7 @@ export function EncounterScreen() {
           systems={PROBLEM_SYSTEMS}
           cleanLabels
           label="Add a problem"
-          hint="Type a condition — e.g. “asth”. Each problem is stored as both a SNOMED and an ICD-10-CM code."
+          hint="Type a condition — e.g. “asth”. We capture the selected SNOMED result plus the top ICD-10-CM result for the same query."
           placeholder="Start typing a condition…"
         />
       </Panel>

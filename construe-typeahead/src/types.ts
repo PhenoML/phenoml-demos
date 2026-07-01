@@ -9,7 +9,8 @@ export type CodeSystemSlug =
 
 // ---------------------------------------------------------------------------
 // API response shapes (confirmed against docs — do not invent fields).
-// GET /construe/codes/{codesystem}/search/{text|semantic}?q=&limit=
+// GET /construe/codes/{codesystem}/search/text?q=&limit=
+// GET /construe/codes/{codesystem}/search/semantic?text=&limit=
 //   { system: { name, version }, results: [ { code, description } ], found }
 // The system name/version lives on the PARENT system object, not per result.
 // ---------------------------------------------------------------------------

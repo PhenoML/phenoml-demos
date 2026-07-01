@@ -7,7 +7,7 @@
 // same-origin /api/* routes below; this module mints + caches the OAuth token
 // and forwards searches to Construe with a Bearer header.
 //
-//   GET /api/config                      -> { live, baseUrl }   (no secret)
+//   GET /api/config                      -> { live }   (no secret)
 //   GET /api/search/:mode/:slug?q=&limit -> Construe search results
 //
 // Auth: POST {base}/v2/auth/token (OAuth2 client-credentials, creds in JSON
@@ -15,6 +15,9 @@
 // keystroke, and only re-minted on expiry or a 401. Plain Node ESM — uses the
 // global fetch (Node >= 20) and is intentionally kept out of the app's TS
 // program (see server/construeProxy.d.mts for the config-import types).
+//
+// Demo note: before productionizing this credentialed proxy, add application
+// authentication, rate limiting, request logging, and abuse controls.
 // ---------------------------------------------------------------------------
 
 const VALID_MODES = new Set(['text', 'semantic']);
@@ -29,6 +32,8 @@ const VALID_SLUGS = new Set([
 const EXPIRY_SKEW_MS = 30_000;
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 50;
+const MAX_TEXT_QUERY_CHARS = 500;
+const MAX_SEMANTIC_QUERY_CHARS = 10_000;
 
 // Error carrying a SearchErrorKind (mirrors src/types.ts) so the browser can
 // reconstruct a SearchError from the JSON body unchanged.
@@ -63,6 +68,10 @@ function clampLimit(raw) {
   const n = Number.parseInt(raw ?? '', 10);
   if (!Number.isFinite(n) || n <= 0) return DEFAULT_LIMIT;
   return Math.min(n, MAX_LIMIT);
+}
+
+function maxQueryLength(mode) {
+  return mode === 'semantic' ? MAX_SEMANTIC_QUERY_CHARS : MAX_TEXT_QUERY_CHARS;
 }
 
 function sendJson(res, status, body) {
@@ -211,7 +220,7 @@ export function createConstrueProxy({ clientId, clientSecret, baseUrl }) {
 
     try {
       if (req.method === 'GET' && path === '/api/config') {
-        return sendJson(res, 200, { live, baseUrl: base });
+        return sendJson(res, 200, { live });
       }
 
       const match = path.match(/^\/api\/search\/([^/]+)\/([^/]+)$/);
@@ -239,6 +248,17 @@ export function createConstrueProxy({ clientId, clientSecret, baseUrl }) {
           return sendError(
             res,
             new ProxyError('unknown', 'Missing query parameter "q".', 400),
+          );
+        }
+        const maxChars = maxQueryLength(mode);
+        if (q.length > maxChars) {
+          return sendError(
+            res,
+            new ProxyError(
+              'unknown',
+              `Query is too long for ${mode} search. Maximum length is ${maxChars} characters.`,
+              400,
+            ),
           );
         }
         const limit = clampLimit(url.searchParams.get('limit'));
