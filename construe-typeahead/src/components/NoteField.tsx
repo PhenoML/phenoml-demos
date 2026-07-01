@@ -20,10 +20,8 @@ export function NoteField() {
   });
 
   const tags = entriesByKind('note');
-  const committedCodes = new Set(tags.map((t) => t.codes[0]?.code));
 
   function accept(s: Suggestion) {
-    if (committedCodes.has(s.codes[0]?.code)) return; // avoid duplicate tags
     commit('note', s.label, s.codes);
   }
 

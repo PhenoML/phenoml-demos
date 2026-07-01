@@ -23,6 +23,21 @@ function makeId(): string {
   return `e${idCounter}`;
 }
 
+function hasPrimaryCodeMatch(
+  entry: CommittedEntry,
+  kind: FieldKind,
+  codes: CodedConcept[],
+): boolean {
+  const primary = codes[0];
+  if (!primary) return false;
+  const entryPrimary = entry.codes[0];
+  return (
+    entry.kind === kind &&
+    entryPrimary?.system === primary.system &&
+    entryPrimary.code === primary.code
+  );
+}
+
 interface AppState {
   // Config — credentials live server-side (.env); the browser only learns
   // whether Live mode is available, never the secret.
@@ -62,7 +77,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const commit = useCallback(
     (kind: FieldKind, text: string, codes: CodedConcept[]) => {
-      setEntries((prev) => [...prev, { id: makeId(), kind, text, codes }]);
+      setEntries((prev) => {
+        if (prev.some((entry) => hasPrimaryCodeMatch(entry, kind, codes))) {
+          return prev;
+        }
+        return [...prev, { id: makeId(), kind, text, codes }];
+      });
     },
     [],
   );

@@ -47,20 +47,6 @@ export function RowBuilder({
   const open = focused && query.trim().length >= minLength;
 
   function accept(s: Suggestion) {
-    const primary = s.codes[0];
-    const alreadyCommitted =
-      primary &&
-      entries.some((entry) => {
-        const code = entry.codes[0];
-        return code?.system === primary.system && code.code === primary.code;
-      });
-    if (alreadyCommitted) {
-      reset();
-      setActiveIndex(0);
-      inputRef.current?.focus();
-      return;
-    }
-
     commit(kind, s.label, s.codes);
     reset();
     setActiveIndex(0);
