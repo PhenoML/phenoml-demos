@@ -99,8 +99,9 @@ export function SuggestionList({
             px="md"
             py={10}
             onMouseEnter={() => onHover(i)}
-            onMouseDown={(e) => {
-              // mousedown (not click) so we commit before the input blurs.
+            onPointerDown={(e) => {
+              // pointerdown covers mouse and touch, and fires before input blur
+              // can unmount the suggestion list.
               e.preventDefault();
               onSelect(s);
             }}
