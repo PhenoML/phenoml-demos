@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PhenoStore Chat — natural-language FHIR search</title>
+    <style>
+      :root {
+        --bg: #0f1729;
+        --panel: #16213e;
+        --panel-2: #1d2b4d;
+        --accent: #5b8def;
+        --text: #e8edf7;
+        --muted: #9aa7c2;
+        --border: #2a3a5e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        justify-content: center;
+      }
+      .app { width: 100%; max-width: 820px; padding: 24px 16px 80px; }
+      header h1 { margin: 0 0 4px; font-size: 22px; }
+      header p { margin: 0 0 20px; color: var(--muted); }
+      .modes { display: flex; gap: 8px; margin-bottom: 12px; }
+      .modes button {
+        flex: 1; padding: 10px; border: 1px solid var(--border); background: var(--panel);
+        color: var(--muted); border-radius: 10px; cursor: pointer; font-size: 14px;
+      }
+      .modes button .sub { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
+      .modes button.active { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
+      form { display: flex; gap: 8px; margin-bottom: 20px; }
+      input[type="text"] {
+        flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+        background: var(--panel); color: var(--text); font-size: 15px;
+      }
+      input[type="text"]:focus { outline: none; border-color: var(--accent); }
+      button[type="submit"] {
+        padding: 0 20px; border: none; border-radius: 10px; background: var(--accent);
+        color: #fff; font-size: 15px; cursor: pointer;
+      }
+      button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
+      .msgs { display: flex; flex-direction: column; gap: 14px; }
+      .msg { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); }
+      .msg.user { background: var(--panel-2); align-self: flex-end; max-width: 80%; }
+      .msg.bot { background: var(--panel); }
+      .msg.error { background: #3a1d2b; border-color: #7a2e44; }
+      .msg .tag {
+        display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+        color: var(--muted); margin-bottom: 6px;
+      }
+      .msg pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
+      details { margin-top: 10px; }
+      details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+      details pre {
+        margin-top: 8px; background: #0b1220; border: 1px solid var(--border); border-radius: 8px;
+        padding: 12px; overflow: auto; max-height: 360px; font-family: ui-monospace, monospace; font-size: 12px;
+      }
+      .examples { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+      .examples code {
+        background: var(--panel); padding: 2px 6px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>PhenoStore Chat</h1>
+        <p>Ask about the FHIR data in plain English.</p>
+      </header>
+
+      <div class="modes">
+        <button type="button" data-mode="search" class="active">
+          FHIR Search
+          <span class="sub">Find resources of one type</span>
+        </button>
+        <button type="button" data-mode="cohort">
+          Cohort Builder
+          <span class="sub">Population from multiple criteria</span>
+        </button>
+      </div>
+
+      <div class="examples" id="examples"></div>
+
+      <form id="form">
+        <input id="input" type="text" autocomplete="off" placeholder="e.g. patients with diabetes" />
+        <button type="submit" id="send">Send</button>
+      </form>
+
+      <div class="msgs" id="msgs"></div>
+    </div>
+
+    <script>
+      const EXAMPLES = {
+        search: ["all female patients", "active medication requests for metformin", "lab results for creatinine"],
+        cohort: ["female patients over 65 with diabetes but not hypertension", "adults with asthma on inhaled corticosteroids"],
+      };
+
+      let mode = "search";
+      const msgs = document.getElementById("msgs");
+      const input = document.getElementById("input");
+      const send = document.getElementById("send");
+      const examplesEl = document.getElementById("examples");
+
+      function renderExamples() {
+        examplesEl.innerHTML =
+          "Try: " +
+          EXAMPLES[mode].map((e) => `<code>${e}</code>`).join(" ");
+        examplesEl.querySelectorAll("code").forEach((el) => {
+          el.onclick = () => {
+            input.value = el.textContent;
+            input.focus();
+          };
+        });
+      }
+
+      document.querySelectorAll(".modes button").forEach((btn) => {
+        btn.onclick = () => {
+          mode = btn.dataset.mode;
+          document.querySelectorAll(".modes button").forEach((b) => b.classList.toggle("active", b === btn));
+          input.placeholder =
+            mode === "cohort" ? "e.g. patients over 65 with diabetes" : "e.g. patients with diabetes";
+          renderExamples();
+        };
+      });
+
+      function addMsg(cls, tag, text, raw) {
+        const div = document.createElement("div");
+        div.className = "msg " + cls;
+        const tagEl = document.createElement("span");
+        tagEl.className = "tag";
+        tagEl.textContent = tag;
+        const pre = document.createElement("pre");
+        pre.textContent = text;
+        div.append(tagEl, pre);
+        if (raw !== undefined) {
+          const details = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = "Raw FHIR JSON";
+          const rawPre = document.createElement("pre");
+          rawPre.textContent = JSON.stringify(raw, null, 2);
+          details.append(summary, rawPre);
+          div.append(details);
+        }
+        msgs.append(div);
+        div.scrollIntoView({ behavior: "smooth", block: "end" });
+        return div;
+      }
+
+      document.getElementById("form").onsubmit = async (e) => {
+        e.preventDefault();
+        const question = input.value.trim();
+        if (!question) return;
+
+        addMsg("user", mode === "cohort" ? "Cohort" : "Search", question);
+        input.value = "";
+        send.disabled = true;
+        const pending = addMsg("bot", "PhenoStore", "Querying…");
+
+        try {
+          const res = await fetch("/api/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question, mode }),
+          });
+          const data = await res.json();
+          pending.remove();
+          if (!res.ok) {
+            addMsg("error", "Error", data.message || data.error || "Request failed.");
+          } else {
+            addMsg("bot", "PhenoStore", data.summary, data.raw);
+          }
+        } catch (err) {
+          pending.remove();
+          addMsg("error", "Error", String(err));
+        } finally {
+          send.disabled = false;
+          input.focus();
+        }
+      };
+
+      renderExamples();
+      input.focus();
+    </script>
+  </body>
+</html>
