@@ -8,3 +8,5 @@ cds_hooks_server/__pycache__/
 evals/__pycache__/
 evals/report.json
 evals/report.md
+ui/node_modules/
+ui/dist/

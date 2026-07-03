@@ -115,6 +115,29 @@ CDS_HOOKS_URL=http://localhost:8088 .venv/bin/python step2_cdshooks.py   # POST 
 
 ---
 
+## Web UI (provider submit + payer review)
+
+The same pipeline, wrapped in a two-persona web app. **Medplum is the EHR / system of record** (reached *through* PhenoML — `client.fhir.*` proxies to the registered FHIR provider); this app only handles the **prior-auth submission and review**. Prior auth is modeled the standard FHIR way: a **Claim** (`use=preauthorization`) is the submission and the payer's queue item, and a **ClaimResponse** (with a **Coverage** on approval) records the decision.
+
+- **Provider view** — paste a pathology report → watch lang2fhir/construe/IPS + the readiness gap-check flag **HER2 missing** → enter the resolved HER2 (written back to the EHR) → **submit** a preauthorization Claim.
+- **Payer view** — a **queue** of submitted Claims → open one → get the **OncoHealth UM-9 recommendation** (rebuilds the order-sign CDS Hooks envelope and runs [`cds_hooks_server/evaluate.py`](./cds_hooks_server/evaluate.py)) with rationale + the pre-approval Coverage → **Approve / Deny** (human-in-the-loop; you can override the AI). A **HER2 what-if toggle** flips the receptor status and shows the recommendation change live.
+
+**Backend** ([`ui_server.py`](./ui_server.py)) — reuses the same `.env` credentials and builds the UM-9 + readiness agents **once at startup**:
+
+```bash
+.venv/bin/uvicorn ui_server:app --port 8001 --reload    # needs a writable PHENOML_FHIR_PROVIDER_ID for the round-trip
+```
+
+**Frontend** ([`ui/`](./ui) — Vite + React + Mantine, mirrors the `demochat` stack):
+
+```bash
+cd ui && npm install && npm run dev                     # http://localhost:5173 (proxies /api → :8001)
+```
+
+> On a **read-only** FHIR instance the Claim/ClaimResponse writes degrade to a local registry (`.state/claims.json`) so the demo still runs end-to-end; each queue row shows whether it was persisted to Medplum.
+
+---
+
 ## What's in this repo
 
 | Path | What it is |
@@ -124,6 +147,10 @@ CDS_HOOKS_URL=http://localhost:8088 .venv/bin/python step2_cdshooks.py   # POST 
 | [`step2_cdshooks.py`](./step2_cdshooks.py) | Phase 2 - assemble the order-select envelope and post it to the oncology-crd service (Response A / B) |
 | [`step3_ordersign.py`](./step3_ordersign.py) | Phase 3 - order-sign → pre-approved + Coverage, then a HER2-negative DENY contrast |
 | [`run_demo.py`](./run_demo.py) | Runs all four phases in one process |
+| [`pipeline.py`](./pipeline.py) | Return-based intake + readiness logic (shared by the step scripts and the web backend) |
+| [`ui_server.py`](./ui_server.py) | FastAPI backend for the web UI — intake / submit / queue / recommendation / decision |
+| [`pa_fhir.py`](./pa_fhir.py) | Prior-auth persistence: Claim / ClaimResponse / Coverage builders + Medplum read/write with a read-only fallback |
+| [`ui/`](./ui) | The provider + payer web app (Vite + React + Mantine) |
 | [`common.py`](./common.py) | Shared config/auth/helpers + the `.state/` artifact store the steps pass data through (reused from the TMS demo) |
 | [`cds_hooks_server/main.py`](./cds_hooks_server/main.py) | The FastAPI CDS Hooks shim - discovery + the oncology-crd service |
 | [`cds_hooks_server/evaluate.py`](./cds_hooks_server/evaluate.py) | The judgment: resolve the Library, check DataRequirements, call the UM-9 agent, build the cards |

@@ -9,12 +9,11 @@ fill them, then hand a clean payload to the Layer 2 CDS Hooks exchange (Step 2).
 
 Run:  .venv/bin/python step1_5_readiness.py        (run step1_intake.py first)
 """
-import uuid
-
-from common import (HERE, load_env, make_client, resolve_provider, as_dict, parse_json,
+from common import (load_env, make_client, resolve_provider, as_dict, parse_json,
                     banner, retry, cleanup, load_state, save_state, require, reset_state,
                     fresh_requested)
 from cds_hooks_server import evaluate
+import pipeline
 
 
 def _chart_resources(state, extra=None):
@@ -70,18 +69,12 @@ def run(client, env, provider, state, created):
     collected_her2 = ("HER2 status by reflex in-situ hybridization (ISH): POSITIVE (HER2 gene "
                       "amplified). Resolves the earlier equivocal IHC 2+ result.")
     state["collected_her2"] = collected_her2
-    her2_obs = as_dict(retry(client.lang2fhir.create, label="lang2fhir.her2",
-                             version="R4", resource="observation-lab", text=collected_her2))
-    her2_obs["subject"] = {"reference": state["patient_full_url"]}
-    # Stamp the canonical HER2 LOINC + a definitive positive value so the resolved observation
-    # satisfies the HER2 DataRequirement (matched by code) and reads as positive downstream.
-    her2_obs.setdefault("code", {}).setdefault("coding", []).append(
-        {"system": "http://loinc.org", "code": "85319-2",
-         "display": "HER2 [Presence] in Breast cancer specimen by Immune stain"})
-    her2_obs["code"].setdefault("text", "HER2 [Presence] in Breast cancer specimen by Immune stain")
-    her2_obs["valueCodeableConcept"] = {"text": "Positive (HER2 amplified)"}
-    her2_entry = {"fullUrl": f"urn:uuid:{uuid.uuid4()}", "resource": her2_obs,
-                  "request": {"method": "POST", "url": "Observation"}}
+    # pipeline.build_her2_observation structures the resolved result via lang2fhir and stamps the
+    # canonical HER2 LOINC + a definitive positive value, so it satisfies the HER2 DataRequirement
+    # (matched by code) and reads as positive downstream.
+    her2_entry = pipeline.build_her2_observation(client, collected_her2, state["patient_full_url"],
+                                                 positive=True)
+    her2_obs = her2_entry["resource"]
     state["her2_entry"] = her2_entry
 
     her2_writeback_ok = False
