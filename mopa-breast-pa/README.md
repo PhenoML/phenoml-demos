@@ -122,6 +122,16 @@ The same pipeline, wrapped in a two-persona web app. **Medplum is the EHR / syst
 - **Provider view** — paste a pathology report → watch lang2fhir/construe/IPS + the readiness gap-check flag **HER2 missing** → enter the resolved HER2 (written back to the EHR) → **submit** a preauthorization Claim.
 - **Payer view** — a **queue** of submitted Claims → open one → get the **OncoHealth UM-9 recommendation** (rebuilds the order-sign CDS Hooks envelope and runs [`cds_hooks_server/evaluate.py`](./cds_hooks_server/evaluate.py)) with rationale + the pre-approval Coverage → **Approve / Deny** (human-in-the-loop; you can override the AI). A **HER2 what-if toggle** flips the receptor status and shows the recommendation change live.
 
+**Quickest start** — the [`Makefile`](./Makefile) runs the backend (`:8001`) and frontend (`:5173`) together; Ctrl+C stops both:
+
+```bash
+make dev        # first run also creates the venv + installs deps (needs `uv` and `npm`)
+```
+
+Then open http://localhost:5173. Other targets: `make setup` (install deps only), `make backend`, `make frontend`, `make help`.
+
+Or run the two processes yourself in separate shells:
+
 **Backend** ([`ui_server.py`](./ui_server.py)) — reuses the same `.env` credentials and builds the UM-9 + readiness agents **once at startup**:
 
 ```bash
