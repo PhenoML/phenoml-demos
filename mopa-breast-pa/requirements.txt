@@ -1,0 +1,5 @@
+phenoml>=15        # PhenoML Python SDK, v15-native OAuth client credentials
+python-dotenv      # load PHENOML_* credentials from .env
+httpx              # used by the retry() wrapper in common.py + posting to the CDS Hooks shim
+fastapi            # the thin CDS Hooks shim we own (cds_hooks_server/)
+uvicorn            # ASGI server to run the shim live (uvicorn cds_hooks_server.main:app)

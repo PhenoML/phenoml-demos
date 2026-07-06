@@ -1,0 +1,48 @@
+{
+  "resourceType": "RequestGroup",
+  "status": "active",
+  "intent": "order",
+  "subject": { "reference": "__PATIENT__" },
+  "code": {
+    "text": "TH (paclitaxel + trastuzumab), adjuvant, weekly x12 weeks"
+  },
+  "extension": [
+    {
+      "url": "https://mopa.demo/StructureDefinition/regimen-intent",
+      "valueCodeableConcept": {
+        "coding": [
+          { "system": "http://snomed.info/sct", "code": "373846009", "display": "Adjuvant - intent" }
+        ],
+        "text": "Adjuvant therapy"
+      }
+    },
+    {
+      "url": "https://mopa.demo/StructureDefinition/treatment-line",
+      "valueCodeableConcept": {
+        "coding": [
+          { "system": "https://mopa.demo/CodeSystem/line-of-therapy", "code": "1L", "display": "First line" }
+        ],
+        "text": "First line of therapy"
+      }
+    },
+    {
+      "url": "https://mopa.demo/StructureDefinition/disease-context",
+      "valueCodeableConcept": {
+        "coding": [
+          { "system": "http://snomed.info/sct", "code": "254837009", "display": "Malignant neoplasm of breast" }
+        ],
+        "text": "Breast cancer"
+      }
+    }
+  ],
+  "action": [
+    {
+      "title": "Paclitaxel",
+      "resource": { "reference": "__PACLITAXEL_FULLURL__" }
+    },
+    {
+      "title": "Trastuzumab",
+      "resource": { "reference": "__TRASTUZUMAB_FULLURL__" }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+.venv/
+.env
+.state/
+run_demo.log
+path_report.pdf
+__pycache__/
+cds_hooks_server/__pycache__/
+evals/__pycache__/
+evals/report.json
+evals/report.md
