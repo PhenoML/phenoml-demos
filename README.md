@@ -23,6 +23,15 @@ This repository contains demos built with phenoml!
 - Demonstrates processing structured healthcare data and mapping to standardized coding systems
 - See the [README](trial-protocol-coding/README.md) for setup and usage instructions
 
+### :dna: MOPA Lang2FHIR oncology package
+**Location:** `mopa-lang2fhir`
+
+**Key Features:**
+- Reuses the breast cancer prior-auth data from `mopa-breast-pa`
+- Shows which prior-auth artifacts feed a Lang2FHIR workflow
+- Builds an oncology FHIR Bundle, optionally writes it through PhenoML's FHIR Proxy, and runs FHIR2Summary IPS mode
+- Includes optional local OncoHealth demo profile upload
+
 ### about phenoml
 :sparkles: [phenoml](https://phenoml.com/) is a developer platform for healthcare AI. 
 

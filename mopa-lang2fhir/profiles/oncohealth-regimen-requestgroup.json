@@ -1,0 +1,64 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "oncohealth-regimen-requestgroup",
+  "url": "https://pheno.ml/demo/oncohealth/StructureDefinition/oncohealth-regimen-requestgroup",
+  "version": "0.1.0",
+  "name": "OncoHealthRegimenRequestGroup",
+  "title": "OncoHealth Regimen RequestGroup",
+  "status": "draft",
+  "experimental": true,
+  "date": "2026-07-06",
+  "publisher": "PhenoML demo",
+  "description": "RequestGroup profile used by the demo to hold an oncology regimen as the authorization unit, including component MedicationRequests and treatment context extensions.",
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "RequestGroup",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/RequestGroup",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "RequestGroup.status",
+        "path": "RequestGroup.status",
+        "min": 1
+      },
+      {
+        "id": "RequestGroup.intent",
+        "path": "RequestGroup.intent",
+        "min": 1
+      },
+      {
+        "id": "RequestGroup.subject",
+        "path": "RequestGroup.subject",
+        "min": 1,
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/Patient"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "RequestGroup.action",
+        "path": "RequestGroup.action",
+        "min": 1
+      },
+      {
+        "id": "RequestGroup.action.resource",
+        "path": "RequestGroup.action.resource",
+        "min": 1,
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/MedicationRequest"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+phenoml>=15
+python-dotenv
+httpx
+fastapi
+uvicorn
