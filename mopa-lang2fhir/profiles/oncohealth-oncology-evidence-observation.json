@@ -1,0 +1,66 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "oncohealth-oncology-evidence-observation",
+  "url": "https://pheno.ml/demo/oncohealth/StructureDefinition/oncohealth-oncology-evidence-observation",
+  "version": "0.1.0",
+  "name": "OncoHealthOncologyEvidenceObservation",
+  "title": "OncoHealth Oncology Evidence Observation",
+  "status": "draft",
+  "experimental": true,
+  "date": "2026-07-06",
+  "publisher": "PhenoML demo",
+  "description": "Observation profile used by the demo to represent breast oncology evidence required by OncoHealth policy review, including ER, PR, HER2, stage group, and ECOG.",
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Observation",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Observation",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "Observation.status",
+        "path": "Observation.status",
+        "min": 1
+      },
+      {
+        "id": "Observation.subject",
+        "path": "Observation.subject",
+        "min": 1,
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/Patient"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "Observation.code",
+        "path": "Observation.code",
+        "min": 1,
+        "binding": {
+          "strength": "extensible",
+          "description": "ER, PR, HER2, stage group, or ECOG performance status."
+        }
+      },
+      {
+        "id": "Observation.value[x]",
+        "path": "Observation.value[x]",
+        "min": 1,
+        "type": [
+          {
+            "code": "CodeableConcept"
+          },
+          {
+            "code": "string"
+          },
+          {
+            "code": "Quantity"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "oncohealth-summary-package",
+  "url": "https://pheno.ml/demo/oncohealth/StructureDefinition/oncohealth-summary-package",
+  "version": "0.1.0",
+  "name": "OncoHealthSummaryPackage",
+  "title": "OncoHealth Summary Package Bundle",
+  "status": "draft",
+  "experimental": true,
+  "date": "2026-07-06",
+  "publisher": "PhenoML demo",
+  "description": "Bundle profile used by the demo for the resource collection passed to FHIR2Summary IPS mode.",
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Bundle",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/Bundle",
+  "derivation": "constraint",
+  "differential": {
+    "element": [
+      {
+        "id": "Bundle.type",
+        "path": "Bundle.type",
+        "min": 1,
+        "fixedCode": "collection"
+      },
+      {
+        "id": "Bundle.entry",
+        "path": "Bundle.entry",
+        "min": 1
+      },
+      {
+        "id": "Bundle.entry.resource",
+        "path": "Bundle.entry.resource",
+        "min": 1
+      }
+    ]
+  }
+}
