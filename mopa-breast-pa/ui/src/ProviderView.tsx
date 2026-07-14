@@ -16,6 +16,7 @@ export function ProviderView({ onSubmitted }: { onSubmitted: () => void }) {
   const [intake, setIntake] = useState<IntakeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [her2Text, setHer2Text] = useState(DEFAULT_HER2);
   const [her2Positive, setHer2Positive] = useState(true);
@@ -23,17 +24,18 @@ export function ProviderView({ onSubmitted }: { onSubmitted: () => void }) {
   useEffect(() => { api.sampleReport().then((r) => setReport(r.report_text)).catch(() => {}); }, []);
 
   async function runIntake() {
-    setBusy(true); setErr(null); setIntake(null);
+    setBusy(true); setErr(null); setIntake(null); setSubmitted(false);
     try { setIntake(await api.intake(report)); }
     catch (e: any) { setErr(e.message); }
     finally { setBusy(false); }
   }
 
   async function submit() {
-    if (!intake) return;
+    if (!intake || submitting || submitted) return;
     setSubmitting(true); setErr(null);
     try {
       await api.submit(intake.intake_id, her2Text, her2Positive);
+      setSubmitted(true);
       onSubmitted();
     } catch (e: any) { setErr(e.message); }
     finally { setSubmitting(false); }
@@ -90,8 +92,8 @@ export function ProviderView({ onSubmitted }: { onSubmitted: () => void }) {
                     mb="sm" />
                   <Divider mb="sm" />
                   <Button fullWidth color="teal" leftSection={<IconSend size={16} />}
-                    onClick={submit} loading={submitting}>
-                    Submit prior authorization
+                    onClick={submit} loading={submitting} disabled={submitted}>
+                    {submitted ? "Submitted" : "Submit prior authorization"}
                   </Button>
                 </Card>
               </Stack>

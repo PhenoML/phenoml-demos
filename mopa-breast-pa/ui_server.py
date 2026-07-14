@@ -38,6 +38,11 @@ READINESS_PROMPT = (
 # lang2fhir/construe extraction. A demo-scale dict; fine to lose on restart.
 INTAKES: dict = {}
 
+# intake_id -> claim id, for intakes already submitted. An intake is consumed (popped from INTAKES)
+# on a successful submit and recorded here so a repeat submit is rejected instead of queuing a
+# duplicate Claim for the same intake. Same demo-scale lifetime as INTAKES.
+SUBMITTED: dict = {}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -88,6 +93,25 @@ def _require_client():
         raise HTTPException(503, "PhenoML client not initialized. Set PHENOML_CLIENT_ID / "
                                  "PHENOML_CLIENT_SECRET (and PHENOML_FHIR_PROVIDER_ID) and restart.")
     return app.state.client, app.state.provider
+
+
+def _require_um9():
+    """Guard endpoints that need the UM-9 review agent. The client can be initialized while agent
+    setup failed at startup, so a live client does not imply a usable UM-9 agent; fail with a clear
+    503 instead of calling the agent with a missing id and erroring at runtime."""
+    if app.state.um9_agent_id is None:
+        raise HTTPException(503, "UM-9 review agent unavailable (agent init failed at startup); "
+                                 "check backend logs and restart.")
+    return app.state.um9_agent_id
+
+
+def _patient_reference(snap: dict) -> str:
+    """Reference for the resolved-HER2 Observation's subject. Prefer the server-assigned Patient id
+    (resolvable in a standalone write-back transaction) over the bundle-local urn:uuid, which many
+    FHIR servers reject outside its original bundle. Falls back to the urn:uuid on a read-only
+    instance where the chart was never persisted."""
+    pid = snap.get("patient_id")
+    return f"Patient/{pid}" if pid else snap["patient_full_url"]
 
 
 # ---------- helpers -------------------------------------------------------
@@ -188,11 +212,14 @@ def submit(req: SubmitReq):
     client, provider = _require_client()
     artifacts = INTAKES.get(req.intake_id)
     if not artifacts:
+        if req.intake_id in SUBMITTED:
+            raise HTTPException(409, f"intake already submitted as claim {SUBMITTED[req.intake_id]}")
         raise HTTPException(404, "unknown intake_id (re-run intake)")
 
-    # Resolve HER2 and write it back to the EHR, exactly like Step 1.5.
+    # Resolve HER2 and write it back to the EHR, exactly like Step 1.5. Reference the persisted
+    # Patient by server id so the standalone write-back transaction resolves the subject.
     her2_entry = pipeline.build_her2_observation(client, req.her2_result,
-                                                 artifacts["patient_full_url"], positive=req.her2_positive)
+                                                 _patient_reference(artifacts), positive=req.her2_positive)
     write = pipeline.persist_chart(client, provider, {"resourceType": "Bundle", "type": "transaction",
                                                       "entry": []}, [her2_entry], [])
     readiness_after = _readiness(client, artifacts, extra=[her2_entry["resource"]])
@@ -209,9 +236,19 @@ def submit(req: SubmitReq):
         "ips_text": artifacts["ips_text"],
         "construe_codes": artifacts["construe_codes"],
         "readiness": readiness_after,
-        "nccn_fact": {"regimen": "TH", "indication": "adjuvant HER2+ breast", "nccn_category": "1"},
+        "nccn_fact": {
+            "regimen": "TH",
+            "her2_positive": req.her2_positive,
+            "indication": "adjuvant HER2+ breast" if req.her2_positive else "adjuvant HER2- breast",
+            "nccn_category": "1" if req.her2_positive
+                             else "not supported (trastuzumab requires HER2-positive)",
+        },
     }
     record = pa_fhir.submit_claim(client, provider, snapshot)
+    # Consume the intake so returning to the provider tab (or a double-click) cannot queue a
+    # duplicate Claim for the same intake.
+    INTAKES.pop(req.intake_id, None)
+    SUBMITTED[req.intake_id] = record["id"]
     return {"claim": pa_fhir._light(record), "her2_writeback": write, "readiness": readiness_after}
 
 
@@ -242,6 +279,7 @@ def claim_detail(claim_id: str):
 @app.post("/api/claims/{claim_id}/recommendation")
 def recommendation(claim_id: str, req: RecommendReq):
     client, provider = _require_client()
+    um9_agent_id = _require_um9()
     record = pa_fhir.get_claim(claim_id)
     if not record:
         raise HTTPException(404, "unknown claim")
@@ -249,15 +287,15 @@ def recommendation(claim_id: str, req: RecommendReq):
 
     # Pick the HER2 evidence: resolved (default, as submitted) or a reviewer what-if override.
     if req.her2_override == "negative":
-        her2_entry = _static_her2_entry(snap["patient_full_url"], positive=False)
+        her2_entry = _static_her2_entry(_patient_reference(snap), positive=False)
     elif req.her2_override == "positive":
-        her2_entry = _static_her2_entry(snap["patient_full_url"], positive=True)
+        her2_entry = _static_her2_entry(_patient_reference(snap), positive=True)
     else:  # None -> the resolved HER2 collected at submit
         her2_entry = snap.get("her2_entry")
 
     envelope = build_envelope({**snap, "requirements": app.state.library}, "order-sign",
                               her2_entry=her2_entry)
-    resp = evaluate.evaluate(client, app.state.um9_agent_id, envelope, app.state.library)
+    resp = evaluate.evaluate(client, um9_agent_id, envelope, app.state.library)
     outcome = classify(resp)
     card = (resp.get("cards") or [{}])[0]
     coverage = (resp.get("systemActions") or [None])[0]
@@ -277,6 +315,8 @@ def decision(claim_id: str, req: DecisionReq):
                                          req.citations, req.coverage)
     except KeyError:
         raise HTTPException(404, "unknown claim")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
     return {"claim": pa_fhir._light(record)}
 
 

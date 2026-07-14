@@ -193,6 +193,9 @@ def record_decision(client, provider, local_id: str, decision: str, rationale: s
     record = reg["claims"].get(local_id)
     if not record:
         raise KeyError(local_id)
+    if record.get("status") in ("approved", "denied"):
+        # Already decided: refuse to write a second ClaimResponse / overwrite the recorded outcome.
+        raise ValueError(f"claim already {record['status']}")
     snapshot = record["snapshot"]
     cr = build_claim_response(snapshot, record.get("fhir_claim_id"), decision, rationale, citations)
     cr_id, cr_err = _try_create(client, provider, "ClaimResponse", cr)

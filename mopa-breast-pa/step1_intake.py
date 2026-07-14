@@ -14,6 +14,8 @@ script keeps the banners and printed narrative so it still reads top-to-bottom a
 
 Run:  .venv/bin/python step1_intake.py        (then step1_5_readiness.py, step2_cdshooks.py, ...)
 """
+import sys
+
 from common import (load_env, make_client, resolve_provider, banner,
                     cleanup, load_state, save_state, reset_state, fresh_requested)
 import pipeline
@@ -34,7 +36,10 @@ def run(client, env, provider, state, created):
         for r in extracted or []:
             print(f"  - {r.get('resourceType')}: {r.get('description')}")
 
-    p_url = pipeline.patient_full_url(bundle)  # raises if not exactly one Patient
+    try:
+        p_url = pipeline.patient_full_url(bundle)  # raises if not exactly one Patient
+    except ValueError as e:
+        sys.exit(f"{e}; the IPS + EHR steps assume a single patient. Re-run with --fresh to re-extract.")
     state["patient_full_url"] = p_url
 
     # --- Step 1.2: structure the documented mCODE elements (lang2fhir.create) --
