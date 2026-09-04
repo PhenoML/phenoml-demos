@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react'
 import { createConstrueProxy } from './server/construeProxy.mjs'
 
 // Standalone SPA. A small server-side middleware (server/construeProxy) holds the
-// PhenoML credentials and proxies same-origin /api/* calls to Construe, so the
-// client secret is read from .env server-side and NEVER shipped to the browser.
+// PhenoML credentials and proxies same-origin /api/* calls to Construe through
+// the PhenoML TypeScript SDK, so the client secret is read from .env server-side
+// and NEVER shipped to the browser.
 export default defineConfig(({ mode }) => {
   // Empty prefix loads NON-VITE vars (PHENOML_*) from .env too. These stay
   // server-side — only VITE_-prefixed vars are ever exposed to client code.
