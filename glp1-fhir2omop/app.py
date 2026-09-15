@@ -14,7 +14,6 @@ Bonus: natural-language cohort selection via client.cohort.analyze.
 
 Run:  python app.py   (serves http://localhost:8017)
 """
-import os
 import threading
 import uuid
 from collections import Counter
@@ -372,4 +371,4 @@ app.mount("/", StaticFiles(directory=Path(HERE, "static"), html=True), name="sta
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8017")))
+    uvicorn.run(app, host="127.0.0.1", port=int(ENV.get("PORT", "8017")))
