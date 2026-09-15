@@ -1,0 +1,170 @@
+/* GLP-1 Cohort Studio — tokens follow the validated reference dataviz palette.
+   Series slots are fixed by entity: 1=Zepbound (blue), 2=Wegovy (orange),
+   3=Ozempic (aqua) — identity is always carried by the text label, color is
+   reinforcement (light-mode aqua sits <3:1, relief = visible labels). */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --hairline: #e1e0d9;
+  --ring: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --accent: var(--series-1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --hairline: #2c2c2a;
+    --ring: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1200px; margin: 0 auto 64px; padding: 0 20px; display: grid; gap: 16px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.sub { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
+.muted { color: var(--text-muted); font-weight: 400; font-size: 12.5px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+.topbar {
+  max-width: 1200px; margin: 0 auto; padding: 18px 20px 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.provider-chip {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px;
+  color: var(--text-secondary); border: 1px solid var(--ring);
+  border-radius: 999px; padding: 5px 12px; background: var(--surface-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46ch;
+}
+
+.card {
+  background: var(--surface-1); border: 1px solid var(--ring);
+  border-radius: 10px; padding: 16px;
+}
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* toolbar + buttons */
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar.right { justify-content: flex-end; margin-top: 8px; }
+.sep { width: 1px; height: 18px; background: var(--hairline); }
+button {
+  font: inherit; font-size: 13px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--ring); background: var(--surface-1); color: var(--text-primary);
+  padding: 6px 12px;
+}
+button:hover { border-color: var(--text-muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { filter: brightness(0.95); }
+button:disabled { opacity: 0.5; cursor: default; }
+.ghost { background: transparent; }
+
+/* series dots + chips: dot carries the hue, the label carries identity */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.dot.s1 { background: var(--series-1); }
+.dot.s2 { background: var(--series-2); }
+.dot.s3 { background: var(--series-3); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--ring); border-radius: 999px;
+  padding: 2px 10px 2px 7px; font-size: 12px; color: var(--text-primary);
+  background: color-mix(in srgb, var(--chip-hue, transparent) 10%, transparent);
+  white-space: nowrap;
+}
+.chip .dot { margin-right: 0; }
+.chip.neutral { background: transparent; color: var(--text-secondary); }
+.chip.finding { border-style: dashed; }
+
+/* natural-language cohort row */
+.nl-row { display: flex; gap: 8px; margin: 12px 0 4px; }
+.nl-row input {
+  flex: 1; font: inherit; padding: 7px 10px; border-radius: 7px;
+  border: 1px solid var(--ring); background: var(--page); color: var(--text-primary);
+}
+.nl-result { margin: 8px 0 4px; font-size: 12.5px; color: var(--text-secondary); }
+.nl-result .q { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; display: block; padding: 2px 0; }
+
+/* tables */
+.table-wrap { overflow: auto; margin-top: 10px; border: 1px solid var(--hairline); border-radius: 8px; }
+.table-wrap.tall { max-height: 420px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+th {
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600; position: sticky; top: 0;
+  background: var(--surface-1); z-index: 1;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td .patient-id { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-muted); }
+.empty { color: var(--text-muted); text-align: center; padding: 22px !important; }
+th.chk, td.chk { width: 30px; }
+
+/* controls / jobs */
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.controls label { color: var(--text-secondary); font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+select { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 7px; border: 1px solid var(--ring); background: var(--surface-1); color: var(--text-primary); }
+.job { margin-top: 12px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+.job .status { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+.job .status .ok { color: var(--status-good); }
+.job .status .err { color: var(--status-critical); }
+.progress { height: 6px; border-radius: 3px; background: var(--hairline); overflow: hidden; margin: 6px 0; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; }
+.log {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text-secondary);
+  max-height: 150px; overflow: auto; white-space: pre-wrap; margin: 0;
+}
+
+/* stat tiles (values wear ink, never series color) */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; margin: 12px 0; }
+.tile { border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+.tile .v { font-size: 24px; font-weight: 650; color: var(--text-primary); }
+.tile .l { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--hairline); }
+.tabs button { border: none; background: transparent; border-radius: 7px 7px 0 0; padding: 7px 12px; color: var(--text-secondary); }
+.tabs button.active { color: var(--text-primary); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+
+/* notes drawer */
+#drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 40; }
+#drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 92vw); z-index: 50;
+  background: var(--surface-1); border-left: 1px solid var(--ring);
+  padding: 16px 20px; overflow: auto;
+}
+.drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.note-card { border: 1px solid var(--hairline); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+.note-card .note-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.note-card pre {
+  white-space: pre-wrap; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  color: var(--text-secondary); background: var(--page); border-radius: 6px;
+  padding: 10px; margin: 8px 0; max-height: 320px; overflow: auto;
+}
+.note-card mark { background: color-mix(in srgb, var(--series-2) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.extract-line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }

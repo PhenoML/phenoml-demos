@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLP-1 Cohort Studio — PhenoML demo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>GLP-1 Cohort Studio</h1>
+    <p class="sub">synthetic Rx + progress notes &rarr; <strong>lang2fhir</strong> &rarr; FHIR &rarr; <strong>fhir2omop</strong></p>
+  </div>
+  <div class="provider-chip" id="provider-chip" title="FHIR provider">provider: …</div>
+</header>
+
+<main>
+  <!-- ===================== cohort ===================== -->
+  <section class="card">
+    <div class="card-head">
+      <h2>Cohort <span class="muted" id="cohort-count"></span></h2>
+      <div class="toolbar">
+        <button id="btn-refresh" class="ghost">Refresh</button>
+        <span class="sep"></span>
+        <button class="ghost sel-btn" data-sel="all">Select all</button>
+        <button class="ghost sel-btn" data-sel="none">None</button>
+        <button class="ghost sel-btn" data-sel="zepbound"><span class="dot s1"></span>Zepbound</button>
+        <button class="ghost sel-btn" data-sel="wegovy"><span class="dot s2"></span>Wegovy</button>
+        <button class="ghost sel-btn" data-sel="ozempic"><span class="dot s3"></span>Ozempic</button>
+      </div>
+    </div>
+
+    <div class="nl-row">
+      <input id="nl-input" type="text"
+             placeholder='Natural-language cohort, e.g. "male patients on semaglutide" (cohort.analyze)'>
+      <button id="btn-analyze">Analyze &amp; select</button>
+    </div>
+    <div id="nl-result" class="nl-result" hidden></div>
+
+    <div class="table-wrap">
+      <table id="cohort-table">
+        <thead>
+          <tr>
+            <th class="chk"><input type="checkbox" id="chk-all" title="toggle all"></th>
+            <th>Patient</th>
+            <th>GLP-1</th>
+            <th>Started</th>
+            <th>Diagnoses (structured)</th>
+            <th>Notes</th>
+            <th>Extracted by lang2fhir</th>
+          </tr>
+        </thead>
+        <tbody id="cohort-body">
+          <tr><td colspan="7" class="empty">loading cohort…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== actions ===================== -->
+  <section class="grid-2">
+    <div class="card">
+      <h2>1 · lang2fhir over progress notes</h2>
+      <p class="muted">Extracts structured Conditions/Observations from the selected patients’
+        note text and writes them back to the same FHIR provider (tagged
+        <code>lang2fhir-extracted</code>).</p>
+      <div class="controls">
+        <label>Scope
+          <select id="extract-scope">
+            <option value="followup">Follow-up notes only</option>
+            <option value="all">All notes</option>
+          </select>
+        </label>
+        <label class="chklabel"><input type="checkbox" id="extract-force"> re-extract already-processed notes</label>
+        <button id="btn-extract" class="primary">Run lang2fhir on selected</button>
+      </div>
+      <div class="job" id="job-extract" hidden></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · fhir2omop over the cohort</h2>
+      <p class="muted">Maps the selected patients’ FHIR data (demographics, encounters, diagnoses,
+        prescriptions + extracted findings) to OMOP CDM v5.4 rows.</p>
+      <div class="controls">
+        <button id="btn-omop" class="primary">Run fhir2omop on selected</button>
+      </div>
+      <div class="job" id="job-omop" hidden></div>
+    </div>
+  </section>
+
+  <!-- ===================== OMOP results ===================== -->
+  <section class="card" id="omop-card" hidden>
+    <div class="card-head">
+      <h2>OMOP CDM output</h2>
+      <div class="toolbar">
+        <span class="muted" id="omop-meta"></span>
+        <button class="ghost" id="btn-dl-json">Download JSON</button>
+      </div>
+    </div>
+    <div class="tiles" id="omop-tiles"></div>
+    <div class="tabs" id="omop-tabs"></div>
+    <div class="table-wrap tall">
+      <table id="omop-table"><thead></thead><tbody></tbody></table>
+    </div>
+    <div class="toolbar right">
+      <button class="ghost" id="btn-dl-csv">Download this table as CSV</button>
+    </div>
+  </section>
+</main>
+
+<!-- ===================== notes drawer ===================== -->
+<div id="drawer-backdrop" hidden></div>
+<aside id="drawer" hidden>
+  <div class="drawer-head">
+    <h2 id="drawer-title">Notes</h2>
+    <button class="ghost" id="drawer-close">Close</button>
+  </div>
+  <div id="drawer-body"></div>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>
