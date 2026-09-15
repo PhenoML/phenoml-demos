@@ -23,6 +23,16 @@ This repository contains demos built with phenoml!
 - Demonstrates processing structured healthcare data and mapping to standardized coding systems
 - See the [README](trial-protocol-coding/README.md) for setup and usage instructions
 
+### :syringe: GLP-1 Cohort Studio (lang2fhir + fhir2omop)
+**Location:** `glp1-fhir2omop`
+
+**Key Features:**
+- Seeds synthetic GLP-1 data (Zepbound / Wegovy / Ozempic prescriptions, diagnoses, encounters, progress notes) onto a FHIR provider — with adverse-event language (headache, nausea) hidden in the *narrative* of 10% of the Ozempic patients' follow-up notes
+- A small app runs **lang2fhir** over the notes to surface those findings as structured Conditions stored back on the same FHIR server
+- Then runs **fhir2omop** over a selected cohort to produce OMOP CDM v5.4 tables (person, drug_exposure, condition_occurrence, ...) with concept mappings and CSV export
+- Bonus: natural-language cohort selection via the **cohort** API
+- See the [README](glp1-fhir2omop/README.md) for setup and usage
+
 ### about phenoml
 :sparkles: [phenoml](https://phenoml.com/) is a developer platform for healthcare AI. 
 

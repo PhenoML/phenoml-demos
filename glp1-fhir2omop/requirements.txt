@@ -1,0 +1,5 @@
+phenoml>=17          # PhenoML Python SDK (fhir gateway, lang2fhir, fhir2omop, cohort)
+python-dotenv        # load PHENOML_* credentials from .env
+fastapi              # demo app backend
+uvicorn[standard]    # demo app server
+httpx                # transport-error retry wrapper in common.py (also an SDK dep)
