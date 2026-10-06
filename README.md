@@ -26,6 +26,6 @@ This repository contains demos built with phenoml!
 ### about phenoml
 :sparkles: [phenoml](https://phenoml.com/) is a developer platform for healthcare AI. 
 
-- Read our [docs](https://developer.pheno.ml)
+- Read our [docs](https://console.pheno.ml/docs)
 - Check out our [Youtube channel](https://www.youtube.com/@phenomldev)
 - Come hang on [Discord](https://discord.gg/QgxDjNBxdV)

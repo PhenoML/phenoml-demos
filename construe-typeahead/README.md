@@ -5,7 +5,7 @@ stores **structured medical codes**. The UI shows human-readable text; the in-me
 store holds the coded concepts. A **Show codes** toggle reveals exactly what was
 captured — the key sales moment.
 
-Powered by [PhenoML Construe](https://developer.pheno.ml) code search.
+Powered by [PhenoML Construe](https://console.pheno.ml/docs/api-reference/construe) code search.
 
 ![Plain language in · coded concepts out](#)
 
