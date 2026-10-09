@@ -43,8 +43,9 @@ prefix.
   `shortness of breath` (note), `lipid panel`, `a1c`.
 - **Live Mode** — debounced (250 ms) calls to a real Construe instance, made through a
   **same-origin proxy** so the client secret never reaches the browser. The proxy holds
-  the credentials, fetches a single OAuth token once, and reuses it across all keystrokes
-  (re-auth only on expiry or a 401).
+  the credentials and calls Construe through the PhenoML TypeScript SDK (`phenoml`). The
+  SDK mints, caches, and refreshes the OAuth token and attaches the Bearer header; the
+  proxy re-creates the client and retries once on a search-phase `401`.
 
 This demo does not perform cross-system mapping. For the problem list, SNOMED drives the
 displayed suggestions; the app also captures the top ICD-10-CM search result for the same
@@ -91,9 +92,11 @@ Restart the dev server after editing `.env`.
 
 ### How Live mode reaches Construe
 
-The browser calls same-origin `/api/*`; the proxy adds the Bearer token and forwards to
-Construe. Because the browser talks to the same origin, there's **no CORS** to configure
-and **no secret in the page**. Demo Mode needs no server at all.
+The browser calls same-origin `/api/*`; the proxy calls Construe through the PhenoML
+TypeScript SDK (`phenoml`). The SDK mints, caches, and refreshes the OAuth token and
+attaches the Bearer header. The proxy re-creates the client and retries once on a
+search-phase `401`. Because the browser talks to the same origin, there's **no CORS** to
+configure and **no secret in the page**. Demo Mode needs no server at all.
 
 > ⚠️ **Production note.** The proxy runs as Vite dev/preview middleware, so it's active
 > under `npm run dev` and `npm run preview` but **not** in a bare static `dist/` deploy.
@@ -117,13 +120,30 @@ GET  /api/search/text/{slug}?q={query}&limit=8
 GET  /api/search/semantic/{slug}?q={query}&limit=8
 ```
 
-The proxy (`server/construeProxy.mjs`) holds the credentials and calls Construe:
+Under the hood the SDK issues:
 
 ```
 POST {baseUrl}/v2/auth/token              # OAuth2 client-credentials, creds in JSON body
 GET  {baseUrl}/construe/codes/{slug}/search/text?q={query}&limit=8
 GET  {baseUrl}/construe/codes/{slug}/search/semantic?text={query}&limit=8
                                           # Authorization: Bearer <token>
+```
+
+The proxy uses the SDK server-side:
+
+```js
+import { phenomlClient, phenoml } from 'phenoml'
+
+const client = new phenomlClient({ clientId, clientSecret, baseUrl, maxRetries: 0 })
+
+try {
+  await client.construe.codes.searchText(slug, { q: query, limit })
+  await client.construe.codes.searchSemantic(slug, { text: query, limit })
+} catch (err) {
+  if (err instanceof phenoml.construe.NotFoundError) {
+    console.error(err.statusCode)
+  }
+}
 ```
 
 Response shape (system name/version is on the parent `system` object, not per result):
@@ -134,14 +154,16 @@ Response shape (system name/version is on the parent `system` object, not per re
   "found": 0 }
 ```
 
+`found` is present on text-search responses only; semantic-search responses omit it.
+
 A stored coded concept is composed from `system.name` + `result.code` + `result.description`.
 
 ## Architecture
 
 ```
 server/
-  construeProxy.mjs   holds .env credentials; mints/caches the OAuth token; proxies
-                      /api/config + /api/search/* to Construe (mounted by vite.config.ts)
+  construeProxy.mjs   holds .env credentials; uses phenoml server-side for OAuth and
+                      Construe; proxies /api/config + /api/search/* (mounted by vite.config.ts)
 src/
   api/construe.ts     thin same-origin client: searchText/searchSemantic + /api/config
   api/ranking.ts      client-side re-ranking (pure, testable)
@@ -162,5 +184,5 @@ Credentials are read **only** in `server/construeProxy.mjs` (from `.env`, via `l
 
 ## Stack
 
-Vite 7 · React 18 · TypeScript 5 · Mantine 8 (custom theme) · `@tabler/icons-react`.
-Same toolchain as the sibling `demochat/` demo.
+Vite 7 · React 18 · TypeScript 5 · Mantine 8 (custom theme) · `@tabler/icons-react` ·
+`phenoml` (server-side only). Same toolchain as the sibling `demochat/` demo.

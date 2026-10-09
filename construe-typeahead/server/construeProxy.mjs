@@ -4,21 +4,22 @@
 // This is where the PhenoML credentials live. They are read from .env
 // server-side (PHENOML_CLIENT_ID / PHENOML_CLIENT_SECRET / PHENOML_BASE_URL via
 // vite.config.ts) and NEVER shipped to the browser. The browser talks only to
-// same-origin /api/* routes below; this module mints + caches the OAuth token
-// and forwards searches to Construe with a Bearer header.
+// same-origin /api/* routes below; this module wraps the PhenoML TypeScript SDK.
+// A single server-side phenomlClient mints, caches, and refreshes the OAuth token
+// and calls client.construe.codes.searchText / searchSemantic. On a search-phase
+// 401, the proxy re-creates the client and retries once.
 //
 //   GET /api/config                      -> { live }   (no secret)
 //   GET /api/search/:mode/:slug?q=&limit -> Construe search results
 //
-// Auth: POST {base}/v2/auth/token (OAuth2 client-credentials, creds in JSON
-// body). The token is fetched ONCE, cached with its expiry, reused across every
-// keystroke, and only re-minted on expiry or a 401. Plain Node ESM — uses the
-// global fetch (Node >= 20) and is intentionally kept out of the app's TS
-// program (see server/construeProxy.d.mts for the config-import types).
+// Plain Node ESM is intentionally kept out of the app's TS program (see
+// server/construeProxy.d.mts for the config-import types).
 //
 // Demo note: before productionizing this credentialed proxy, add application
 // authentication, rate limiting, request logging, and abuse controls.
 // ---------------------------------------------------------------------------
+
+import { phenomlClient, phenoml, phenomlError, phenomlTimeoutError } from 'phenoml';
 
 const VALID_MODES = new Set(['text', 'semantic']);
 const VALID_SLUGS = new Set([
@@ -28,8 +29,6 @@ const VALID_SLUGS = new Set([
   'LOINC',
 ]);
 
-// Refresh slightly before the real expiry to avoid edge-of-expiry 401s.
-const EXPIRY_SKEW_MS = 30_000;
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 50;
 const MAX_TEXT_QUERY_CHARS = 500;
@@ -43,25 +42,6 @@ class ProxyError extends Error {
     this.kind = kind;
     this.status = status;
   }
-}
-
-function trimBase(baseUrl) {
-  return baseUrl.replace(/\/+$/, '');
-}
-
-function computeExpiry(data) {
-  // Prefer expires_in (seconds); fall back to an absolute expiry field, else 1h.
-  const expiresIn = data.expires_in;
-  const absExpiry = data.expiry;
-  if (typeof expiresIn === 'number') return Date.now() + expiresIn * 1000;
-  if (typeof absExpiry === 'number') {
-    return absExpiry > 1e12 ? absExpiry : absExpiry * 1000;
-  }
-  if (typeof absExpiry === 'string') {
-    const parsed = Date.parse(absExpiry);
-    return Number.isNaN(parsed) ? Date.now() + 3_600_000 : parsed;
-  }
-  return Date.now() + 3_600_000;
 }
 
 function clampLimit(raw) {
@@ -89,123 +69,97 @@ function sendError(res, err) {
 }
 
 /**
- * Build the proxy middleware. Credentials are fixed at process start, so the
- * token cache only needs to track the token + its expiry (no per-request creds).
+ * @param {unknown} err
+ * @returns {boolean}
  */
-export function createConstrueProxy({ clientId, clientSecret, baseUrl }) {
-  const base = trimBase(baseUrl);
-  const live = Boolean(clientId && clientSecret);
+function isTokenPhase(err) {
+  return err instanceof phenoml.authtoken.UnauthorizedError
+    || (typeof err.rawResponse?.url === 'string' && err.rawResponse.url.includes('/v2/auth/token'));
+}
 
-  let cachedToken = null; // { token, expiresAt } | null
-
-  function clearToken() {
-    cachedToken = null;
+/**
+ * @param {unknown} err
+ * @param {string} slug
+ * @param {'text' | 'semantic'} mode
+ * @returns {ProxyError | null}
+ */
+function mapSdkError(err, slug, mode) {
+  if (!(err instanceof phenomlError)) return null;
+  if (err instanceof phenomlTimeoutError) {
+    return new ProxyError('network', `Construe did not respond in time. (${err.message})`, 504);
   }
-
-  async function fetchToken() {
-    const url = `${base}/v2/auth/token`;
-    let resp;
-    try {
-      resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId,
-          client_secret: clientSecret,
-        }),
-      });
-    } catch (e) {
-      throw new ProxyError(
-        'network',
-        `Could not reach ${url}. (${e instanceof Error ? e.message : String(e)})`,
-        502,
-      );
-    }
-
-    if (resp.status === 401 || resp.status === 403) {
-      throw new ProxyError(
+  if (err.statusCode === undefined) {
+    return new ProxyError('network', `Could not reach Construe. (${err.message})`, 502);
+  }
+  const status = err.statusCode;
+  if (isTokenPhase(err)) {
+    if (status === 401 || status === 403) {
+      return new ProxyError(
         'auth',
         'Authentication failed — check PHENOML_CLIENT_ID / PHENOML_CLIENT_SECRET.',
-        resp.status,
+        status,
       );
     }
-    if (!resp.ok) {
-      throw new ProxyError(
-        'unknown',
-        `Auth request failed (HTTP ${resp.status}).`,
-        resp.status,
-      );
-    }
-
-    const data = await resp.json().catch(() => ({}));
-    const token = data.access_token ?? data.token;
-    if (!token) {
-      throw new ProxyError('auth', 'Auth response did not include a token.', 502);
-    }
-    return { token, expiresAt: computeExpiry(data) };
+    return new ProxyError('unknown', `Auth request failed (HTTP ${status}).`, status);
   }
-
-  async function getToken() {
-    if (cachedToken && cachedToken.expiresAt - EXPIRY_SKEW_MS > Date.now()) {
-      return cachedToken.token;
-    }
-    cachedToken = await fetchToken();
-    return cachedToken.token;
-  }
-
-  async function doSearch(slug, mode, query, limit, token) {
-    // Construe's two endpoints name the query param differently:
-    //   /search/text     → q     (keyword, <=500 chars)
-    //   /search/semantic → text  (natural language, <=10,000 chars)
-    const param = mode === 'semantic' ? 'text' : 'q';
-    const url =
-      `${base}/construe/codes/${slug}/search/${mode}` +
-      `?${param}=${encodeURIComponent(query)}&limit=${limit}`;
-    try {
-      return await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    } catch (e) {
-      throw new ProxyError(
-        'network',
-        `Could not reach Construe. (${e instanceof Error ? e.message : String(e)})`,
-        502,
-      );
-    }
-  }
-
-  // Run a search, with a single re-auth + retry on 401, mapping upstream
-  // statuses to SearchErrorKind-tagged ProxyErrors.
-  async function search(slug, mode, query, limit) {
-    let token = await getToken();
-    let resp = await doSearch(slug, mode, query, limit, token);
-
-    if (resp.status === 401) {
-      clearToken();
-      token = await getToken();
-      resp = await doSearch(slug, mode, query, limit, token);
-    }
-
-    if (resp.status === 401) {
-      throw new ProxyError('auth', 'Unauthorized — re-auth failed.', 401);
-    }
-    if (resp.status === 404) {
-      throw new ProxyError(
+  switch (status) {
+    case 401:
+      return new ProxyError('auth', 'Unauthorized — re-auth failed.', 401);
+    case 404:
+      return new ProxyError(
         'not_found',
         `Code system "${slug}" not found on this instance.`,
         404,
       );
-    }
-    if (resp.status === 501) {
-      throw new ProxyError(
+    case 501:
+      return new ProxyError(
         'not_configured',
         `${mode === 'text' ? 'Text' : 'Semantic'} search is not configured for "${slug}" on this instance.`,
         501,
       );
-    }
-    if (!resp.ok) {
-      throw new ProxyError('unknown', `Search failed (HTTP ${resp.status}).`, resp.status);
-    }
+    default:
+      return new ProxyError('unknown', `Search failed (HTTP ${status}).`, status);
+  }
+}
 
-    const data = await resp.json().catch(() => null);
+/**
+ * Build the proxy middleware. Credentials and the SDK client are fixed at
+ * process start; the client manages token minting, caching, and refresh.
+ */
+export function createConstrueProxy({ clientId, clientSecret, baseUrl }) {
+  const live = Boolean(clientId && clientSecret);
+  // The SDK defaults to retrying 408/429/5xx responses. Disable those retries
+  // to retain the proxy's existing bounded type-ahead request behavior.
+  const makeClient = () => new phenomlClient({
+    clientId,
+    clientSecret,
+    baseUrl,
+    maxRetries: 0,
+  });
+  let client = live ? makeClient() : null;
+
+  // Run a search with a single client rebuild + retry on a search-phase 401,
+  // mapping SDK failures to SearchErrorKind-tagged ProxyErrors.
+  async function search(slug, mode, query, limit) {
+    /** @param {import('phenoml').phenomlClient} c */
+    const run = (c) => mode === 'semantic'
+      ? c.construe.codes.searchSemantic(slug, { text: query, limit })
+      : c.construe.codes.searchText(slug, { q: query, limit });
+    let data;
+    try {
+      const used = client;
+      try {
+        data = await run(used);
+      } catch (err) {
+        // Token-phase auth failures use phenoml.authtoken.UnauthorizedError and
+        // must not be retried with the same bad credentials.
+        if (!(err instanceof phenoml.construe.UnauthorizedError)) throw err;
+        if (client === used) client = makeClient();
+        data = await run(client);
+      }
+    } catch (err) {
+      throw mapSdkError(err, slug, mode) ?? err;
+    }
     if (!data || !Array.isArray(data.results)) {
       throw new ProxyError('unknown', 'Unexpected response shape from Construe.', 502);
     }
